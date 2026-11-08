@@ -19,12 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-本 MIT 许可只覆盖本仓库作者原创的部分：`cordis.patch.yml`、`package.json`、
-`lib/index.js`、`tools/`、`install-extra.ps1`、`README.md`、`presets/research-writing/SOURCES.md`，
-以及原创技能 `research-writing-overview`。
-
-`presets/research-writing/skills/` 下的其他技能来自第三方仓库，各自保留上游许可，
-逐仓库的许可原文在 `presets/research-writing/LICENSES/`，来源对应关系见 `presets/research-writing/SOURCES.md`。

@@ -109,15 +109,15 @@ plugin_manager install_bundle target="github:lxwang98/research-writing-preset"
 |---|---|---|
 | `cordis.patch.yml`、`package.json`、`lib/`、`tools/`、`install-extra.ps1`、`README.md` | ✅ | 本项目的组合、脚本与文档，作者原创（MIT） |
 | `presets/research-writing/skills/research-writing-overview/` | ✅ | 原创入口技能（阶段路由 + 反编造规则） |
-| 74 个采用宽松许可的技能 | ✅ | MIT / Apache-2.0 / MulanPSL-2.0 / LGPL-3.0，各带上游许可原文 |
+| 74 个上游采用宽松许可的技能 | ✅ | MIT 70 / Apache-2.0 2 / MulanPSL-2.0 1 / LGPL-3.0 1，各带上游许可原文 |
 | 7 个非宽松/无许可技能 | 由 `install-extra.ps1` 拉取 | CC BY-NC 4.0 ×5（Imbad0202 的论文流水线）、上游未声明许可证 ×2 |
 
 入库技能的上游许可统计（以 `presets/research-writing/LICENSES/` 原文为准）：
 
 | 许可 | 数量 | 代表 |
 |---|---|---|
-| MIT | 66 | `scholar-kit`、`nature-paper-*`、`paper-spine`、`chinese-thesis-*` |
-| Apache-2.0 | 4 | `paper-search-pro`、`dailypaper-skills`、`mineru` |
+| MIT | 70 | `scholar-kit`、`nature-paper-*`、`paper-spine`、`chinese-thesis-*` |
+| Apache-2.0 | 2 | `paper-search-pro`、`paper-reader` |
 | MulanPSL-2.0 | 1 | `thesis-writer-zh` |
 | LGPL-3.0 | 1 | `wenxian` |
 | 原创 | 1 | `research-writing-overview` |
