@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+*.log
+
+# 运行时缓存（scholar-kit 等技能会写）
+.scholar-kit/
+*.tmp

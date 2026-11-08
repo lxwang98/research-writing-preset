@@ -1,0 +1,31 @@
+[
+  {
+    "type": "inproceedings",
+    "title": "Semi-Supervised Classification with Graph Convolutional Networks",
+    "authors": ["Kipf, Thomas N", "Welling, Max"],
+    "booktitle": "International Conference on Learning Representations",
+    "year": 2017,
+    "url": "https://openreview.net/forum?id=SJU4ayYgl",
+    "sources": ["https://openreview.net/forum?id=SJU4ayYgl"]
+  },
+  {
+    "type": "inproceedings",
+    "title": "Focal Loss for Dense Object Detection",
+    "authors": ["Lin, Tsung-Yi", "Goyal, Priya", "Girshick, Ross", "He, Kaiming", "Dollár, Piotr"],
+    "booktitle": "Proceedings of the IEEE International Conference on Computer Vision",
+    "year": 2017,
+    "pages": "2980-2988",
+    "sources": ["https://openaccess.thecvf.com/content_ICCV_2017/html/Lin_Focal_Loss_for_ICCV_2017_paper.html"]
+  },
+  {
+    "type": "article",
+    "title": "理想的图书馆员和信息专家的素质与形象",
+    "authors": ["李炳穆"],
+    "journal": "图书情报工作",
+    "year": 2000,
+    "volume": "44",
+    "issue": "2",
+    "pages": "5-8,95",
+    "sources": ["https://www.lis.ac.cn/CN/Y2000/V44/I2"]
+  }
+]

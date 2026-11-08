@@ -1,0 +1,249 @@
+# 工作流详解
+
+Agent 执行具体任务时按需读取本文档。决策入口见 [SKILL.md 决策指南](../SKILL.md#决策指南)。
+
+## 文献检索
+
+1. 提取关键词（中文 + 英文）
+   - 中文关键词适用于 CNKI、NSSD
+   - 英文关键词适用于 OpenAlex、Semantic Scholar、arXiv、DBLP、BASE
+   - `cnki_feasible: false` 时若用户给中文主题，Agent 应翻译为英文再查 API 源
+2. 用户要求核心期刊时 → 判断学科 → 决定 `--core`（读 [核心期刊知识](core-journals.md)）
+3. `cnki_feasible: true` → 单词用 `search`，多词用 `batch-search`；`cnki_feasible: false` → 用 `search --source openalex` 等 API 源
+4. 展示结果，注明筛选了哪些来源类别
+
+### API 源高级检索技巧
+
+**排序策略**：
+- 按被引数排序：`--sort citations` - 找经典高引论文
+- 按时间排序：`--sort date` - 找最新研究进展
+- 按质量排序：`--sort quality` - 综合评分筛选高质量论文
+
+**精确过滤**：
+- 期刊过滤：`--journal-filter "Nature"` - 限定特定期刊
+- 作者过滤：`--author-filter "Hinton"` - 查找特定作者的论文
+- 学科过滤：`--field-of-study "Computer Vision"` - 限定学科领域
+- 组合过滤：可同时使用多个过滤条件，例如 `--year-from 2020 --journal-filter "Nature" --author-filter "LeCun"`
+
+**字段搜索**：
+- 标题搜索：`--field 篇名` - 只在标题中搜索，减少噪音
+- 摘要搜索：`--field 摘要` - 只在摘要中搜索
+
+**分页浏览**：
+- 大量结果时使用 `--page 2` 浏览后续页面
+- 每页结果单独缓存，重复访问速度快
+
+**降级与并发**：
+- 单一 API 源偶发无结果或请求失败时，加 `--enable-fallback` 自动尝试备用源
+- 多源检索需要更快返回时，用 `--source all --async-search` 并发检索 OpenAlex、Semantic Scholar、arXiv、NSSD、DBLP、BASE
+
+**示例**：
+```bash
+# 查找 2020 年后 Nature 上关于深度学习的高引论文
+search "deep learning" --source openalex --year-from 2020 --journal-filter "Nature" --sort citations --limit 20
+
+# 查找 Hinton 关于神经网络的最新论文
+search "neural networks" --source openalex --author-filter "Hinton" --sort date --limit 10
+
+# 按质量筛选计算机视觉领域的论文
+search "object detection" --source openalex --field-of-study "Computer Vision" --sort quality --limit 15
+
+# 使用 DBLP 搜索计算机科学领域的论文（适合查找会议论文和技术报告）
+search "transformer architecture" --source dblp --year-from 2020 --limit 15
+
+# 使用 BASE 搜索欧洲开放获取资源
+search "climate change" --source base --year-from 2021 --limit 20
+
+# 分页浏览大量结果
+search "machine learning" --source openalex --limit 20 --page 1
+search "machine learning" --source openalex --limit 20 --page 2
+
+# 主源无结果时自动降级
+search "graph neural networks" --source semantic --enable-fallback --limit 20
+
+# 并发多源检索
+search "AI in education" --source all --async-search --limit 30
+```
+
+更多 API 源过滤、排序和分页策略见 [API 源检索最佳实践](api-search-best-practices.md)。
+
+**数据源选择建议**：
+- **计算机科学**：优先使用 DBLP（会议论文和技术报告覆盖全面）+ OpenAlex
+- **欧洲研究/开放获取**：优先使用 BASE（欧洲学术资源，350M+ 文档）
+- **综合学科**：OpenAlex（覆盖最广）或 Semantic Scholar（引文网络强）
+- **预印本/最新研究**：arXiv（物理、数学、计算机）
+- **中文文献**：CNKI（核心期刊）或 NSSD（哲学社会科学）
+
+**数据源特点**：
+- **DBLP**：计算机科学专业数据库，会议论文质量高，但无摘要和被引数据
+- **BASE**：欧洲开放获取资源，文档量大，但可能有 IP 访问限制
+- **OpenAlex**：综合性最强，摘要和引用数据完整
+- **Semantic Scholar**：AI 驱动，引文网络分析能力强
+- **arXiv**：预印本为主，更新快但未经同行评议
+
+### 预定义工作流
+
+可用 `workflows --list` 查看模板，用 `workflows --execute <id> --variables <json>` 预览或执行。Windows PowerShell 调用原生命令时，JSON 内部双引号需要写成 `""`：
+
+```powershell
+python scripts\literature.py workflows --execute literature_review_classic --variables '{""topic"":""deep learning""}' --dry-run
+```
+
+## 写文献综述
+
+1. `read-paper` 读取用户论文
+2. 提取 5-10 组关键词 → 搜索（`cnki_feasible` 时用 `batch-search --append`；否则逐组执行 `search --source openalex "关键词"`，Agent 从每次 JSON 输出中收集结果自行合并）
+3. 初筛 3-5 篇 → `cnki_feasible` 时用 `read-detail --fulltext`，否则直接使用 API 返回的摘要
+4. 基于全文/摘要提炼观点，标注引用来源
+5. `cite --style gbt7714` 生成参考文献（有 DOI 的论文会自动通过 Crossref 补全卷期页码，引用更完整）
+
+## 引用建议
+
+1. `read-paper` 读取论文
+2. 识别需要引用的句子 → 提取关键词
+3. 搜索（同上，按 `cnki_feasible` 选命令）→ 初筛
+4. 精准匹配：哪句话引哪篇的哪段
+5. 区分"必须引用"和"建议引用"
+
+## 改写论文并生成 Word（内容大改）
+
+1. `read-paper` 读取用户论文
+2. 提取关键词 → 搜索（按 `cnki_feasible` 选命令）→ 获取参考文献内容
+3. Agent 改写论文，输出 Markdown 文件，用 `[^1]` 标记脚注
+4. 在 Markdown 末尾用 `[^1]: 引用文本` 定义脚注内容（或用 `## 参考文献` 节）
+5. `write-docx draft.md --output 论文.docx` → 生成标准学术格式 Word
+
+## 基于用户提供的 PDF 文献库
+
+用户提供一个文件夹（含多篇 PDF），要求筛选可用文献、写综述或插入引用：
+
+1. 用 Glob 扫描文件夹获取所有 `.pdf` 路径
+2. 逐篇用 Agent 内置的文件读取工具读取 PDF 内容（**不要用 `read-paper`，PDF 直接读取**）
+3. 对每篇提取：标题、作者、摘要/核心观点、与用户论文的关联度
+4. 按关联度排序，向用户报告筛选结果
+5. 后续操作视用户需求而定：
+   - 写综述 → Agent 综合各篇观点，输出 Markdown，用 `write-docx` 生成 Word
+   - 插引用 → Agent 生成 patch JSON，用 `patch-docx` 在用户论文上打补丁
+   - 仅推荐 → 展示推荐列表 + 理由
+
+注意：PDF 数量多时（>10 篇），先读每篇前 2-3 页快速判断相关性，仅对相关篇目读全文。
+
+## 在原论文中插入引用（保留格式）
+
+1. `read-paper` 读取用户论文
+2. 搜索匹配引用（同上）
+3. Agent 生成补丁 JSON 文件，格式：
+   ```json
+   {
+     "patches": [{"find": "原文片段", "replace": "替换后片段"}],
+     "footnotes": [{"after": "定位文本", "text": "脚注引用内容"}],
+     "append_references": ["[1] 参考文献1", "[2] 参考文献2"]
+   }
+   ```
+   **生成 patch JSON 时注意**：`find` 和 `after` 的定位串要足够长（≥10 字）且在文档中唯一，避免命中错误位置；尽量不要让定位串跨越加粗/斜体等格式边界。
+4. `patch-docx 原论文.docx --patch patch.json --output 修改后.docx`
+
+## 学术表达优化
+
+当用户请求"降重""改重""降低重复率"或"改写表达""去 AI 腔"时，按以下步骤执行。每一步都是独立的学术写作辅助任务。
+
+**改写前先读 [表达审计规则](style-audit.md)**。其中的问题清单、保留清单和证据纪律是后续步骤的判据，不要凭感觉润色。
+
+**第一步：阅读与理解论文**
+
+`read-paper` 读取用户论文，理解全文结构、核心论点、论证逻辑。用户提供了本人既往论文时，一并读取 1–2 篇作为风格样本。
+
+**第二步：审计（只诊断，不改写）**
+
+按 [style-audit](style-audit.md) 逐段检查三个维度，产出问题清单（段落 / 命中类型 / 初步改法），先交给用户确认再动手：
+- **原创性**：概念定义段、文献引述段、论证过渡段是否只做了搬运（style-audit 第一节）
+- **文体**：中文 AI 腔清单 2.1–2.10 命中哪些（写英文时另查 2.11）
+- **证据**：强断言无支撑、动词强于证据、空洞量级（style-audit 第四节）
+
+如用户提供了标注报告（PDF），用 Agent 内置工具读取，与审计结果合并，以报告标记为主要依据。
+
+**第三步：逐段改写**
+
+对每个标记段落，按审计结论逐条改写：
+- **措辞与句式**：按 style-audit 第二章的对应条目替换，不做清单外的自由发挥
+- **原创论述增强**：在引用他人观点后补充作者的分析、比较或评价
+- **论证逻辑**：补出前提→推断，而不是只加连接词
+- **证据对齐**：无支撑的强断言补指标、表号或引文；补不上就降级动词
+
+约束：**不得改变原文学术含义，不得删除关键论据，不得引入原文未涉及的观点，不得改动任何数字、公式、引文**（见 style-audit 第三节保留清单）
+
+**第四步：写回文档**
+
+生成 patch JSON → `patch-docx` 保留原格式写回：
+- 每个 `find` 是原始表述，`replace` 是优化后表述
+- 改写幅度大时可用 `write-docx` 全文输出
+
+**第五步：报告改动**
+
+按 style-audit 第七节的模板输出变更日志：段落、命中类型、改动要点、证据核查结果，并声明数字/引文未改动的处数。
+
+**限制**：本工具不提供文本相似度检测，无法给出重复率数值，也不针对查重系统做规避；优化效果需用户自行验证。详见 [style-audit 第六节](style-audit.md#六与查重的边界)。
+
+## 引文网络分析
+
+用户提供一篇论文（DOI、URL 或 arXiv ID），要求追踪引用关系：
+
+1. `citations "<DOI或URL>"` 获取双向引文网络（默认 `--direction both`）
+2. Agent 展示结果：
+   - 前向引用（`--direction citing`，输出字段 `citing`）：后续研究如何发展了这篇论文的观点
+   - 后向引用（`--direction cited`，输出字段 `references`）：这篇论文引用了哪些前人工作
+3. 用户可进一步要求：下载高被引的引用论文、对引用论文做趋势分析
+
+注意：`citations` 基于 Semantic Scholar API，不需要知网，`cnki_feasible: false` 时仍可使用。
+
+## 研究趋势分析
+
+用户搜索了一批论文后，要求分析研究趋势：
+
+1. 确保会话中有搜索数据（先执行 search 或 batch-search）
+2. `trends` 输出聚合统计：年份分布、高频关键词 Top 30、高被引论文 Top 10、数据源分布
+3. Agent 据此向用户描述：
+   - 发文量趋势（哪些年份发文多，是否在增长）
+   - 热点关键词（当前研究聚焦什么主题）
+   - 关键文献（高被引论文有哪些，值得优先阅读）
+
+## 文献对比矩阵
+
+用户要求对比多篇论文时，Agent 按以下模板整理（不需要新脚本命令）：
+
+1. 读取论文内容：知网论文用 `read-detail --fulltext`；API 源论文直接使用搜索返回的摘要，或由用户提供 PDF
+2. 对每篇论文提取以下维度：
+
+| 维度 | 说明 |
+|------|------|
+| 研究问题 | 论文试图回答什么问题 |
+| 研究方法 | 定性/定量/混合，具体方法 |
+| 数据来源 | 样本量、数据收集方式 |
+| 核心发现 | 主要结论（1-2 句） |
+| 理论贡献 | 对已有理论的推进 |
+| 局限性 | 作者承认的局限 |
+| 与用户研究的关联 | 如何为用户研究提供支持 |
+
+3. 输出为 Markdown 对比表，可用 `write-docx` 生成 Word
+
+## 阅读笔记生成
+
+用户要求对论文做阅读笔记时，Agent 按以下结构输出（不需要新脚本命令）：
+
+对每篇论文生成：
+
+```
+## [论文标题]（[年份]）
+**作者**：[作者列表]
+**期刊**：[期刊名]
+**核心论点**：[1-2 句概括]
+**研究方法**：[方法描述]
+**关键发现**：
+- [发现 1]
+- [发现 2]
+**与我的研究的关联**：[如何为当前研究提供支持或启发]
+**值得引用的观点**：[具体可引用的论述，标注页码/章节]
+**局限与未来方向**：[作者提出的局限和研究展望]
+```
+
+多篇论文时，最后附一段"综合评述"，指出论文间的共识、分歧和研究空白。

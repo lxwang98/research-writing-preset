@@ -1,0 +1,23 @@
+{
+  "skill_name": "multi-source-paper-search",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我多源搜一下「检索增强生成在临床问答中的应用」最近几年的论文，我想知道哪些结论是各个来源都认可的、哪些还有争议。",
+      "expected_output": "A cited cross-source synthesis report in Chinese: 检索概况 (states which of 4 sources ran + skipped), 共识发现, 分歧高亮, 每源独有贡献, 论文排名表 with consensus column, 参考文献. Should run fanout.py with 2-3 query variants, surface degradation honestly if sources are skipped.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "search arxiv and openalex for recent work on parameter-efficient fine-tuning of large language models — I want the most-cited papers and whether the different sources agree on what the strongest methods are",
+      "expected_output": "English cross-source report. fanout.py invoked with English variants (LoRA / PEFT / adapter aliases). Ranking table sorted by consensus then citations. Notes which sources were live. Claim-level comparison of which methods sources agree are strongest.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "我在写 HRV 测量方法对睡眠 readiness 评分影响的综述，能不能跨多个数据库帮我把这块的文献扫一遍，重点是不同设备 (RMSSD vs SDNN) 的可比性争议？",
+      "expected_output": "Chinese cross-source report focused on HRV measurement methods. Must use multiple sources, expand query (HRV / heart rate variability / RMSSD / SDNN / wearable). Divergence section should highlight the RMSSD-vs-SDNN comparability debate if found across sources. Offers to save at the end.",
+      "files": []
+    }
+  ]
+}

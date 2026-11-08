@@ -1,0 +1,43 @@
+{
+  "name": "@local/dsh-preset-research-writing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "科研写作模式 — DSH agent preset for the full research-writing pipeline (topic → search → reading → review → writing → citation → submission → peer review), with 80+ bundled academic skills.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "agent-preset",
+    "research-writing",
+    "academic-writing",
+    "literature-review",
+    "chinese-thesis",
+    "citation"
+  ],
+  "author": "lxwang98",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lxwang98/research-writing-preset.git"
+  },
+  "homepage": "https://github.com/lxwang98/research-writing-preset#readme",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "cordis.patch.yml",
+    "presets/research-writing",
+    "tools",
+    "install-extra.ps1",
+    "README.md",
+    "LICENSE"
+  ]
+}
