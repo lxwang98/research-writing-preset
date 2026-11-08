@@ -34,7 +34,13 @@ if (-not $SkillsDir) {
 $SkillsDir = [System.IO.Path]::GetFullPath($SkillsDir)
 
 if (-not (Test-Path $SkillsDir)) {
-    throw "技能目录不存在：$SkillsDir（先 clone 本仓库，或显式传 -SkillsDir）"
+    if ($PSBoundParameters.ContainsKey('SkillsDir')) {
+        # 显式指定了目录，允许直接创建（方便装到自建技能目录）
+        New-Item -ItemType Directory -Force -Path $SkillsDir | Out-Null
+    }
+    else {
+        throw "技能目录不存在：$SkillsDir（先 clone 本仓库，或显式传 -SkillsDir）"
+    }
 }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     throw '找不到 git，请先安装 Git for Windows：https://git-scm.com/download/win'

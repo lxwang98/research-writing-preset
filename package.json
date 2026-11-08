@@ -2,7 +2,7 @@
   "name": "@local/dsh-preset-research-writing",
   "version": "1.0.0",
   "private": true,
-  "description": "科研写作模式 — DSH agent preset for the full research-writing pipeline (topic → search → reading → review → writing → citation → submission → peer review), with 80+ bundled academic skills.",
+  "description": "科研写作模式 — DSH agent preset for the full research-writing pipeline (topic → search → reading → review → writing → citation → submission → peer review). 75 academic skills are bundled (82 in total once install-extra.ps1 fetches the 7 license-gated extras).",
   "keywords": [
     "dsh",
     "deepseek-harness",
