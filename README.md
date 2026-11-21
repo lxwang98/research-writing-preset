@@ -46,6 +46,7 @@ Agent 预设。装上它，会话里的 Agent 就是一名科研写作助手：�
 中文期刊版 DOCX 的完整排版规范（页面、字体字号、表格、参考文献、静态目录、构建流程、验收清单）见
 [`journal-docx-format.md`](presets/research-writing/skills/research-writing-overview/references/journal-docx-format.md)；
 人设的「论文类型默认规范」已带硬约束，日常不必重新交代字号与行距。
+英文版 DOCX 的默认字体（Times New Roman）、首行缩进 0.5 英寸与同样的静态目录流程，见同一份 reference 的第 10 节。
 
 ## 安装
 
