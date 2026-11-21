@@ -87,8 +87,9 @@ description: 科研写作模式总览与路由。把「选题 → 文献检索 �
 
 - A4，左右边距 2.6 cm、上下 2.5 cm；中文楷体、英文 Times New Roman。
 - 正文 12 pt、1.5 倍行距、首行缩进 24 pt；标题 18 pt，英文标题 14 pt，H1 14 pt、H2 12 pt。
-- 表格与参考文献 10.5 pt；表格 `Table Grid`、表头跨页重复、行不跨页；参考文献悬挂缩进 24 pt。
+- 表格与参考文献 10.5 pt；表格 `Table Grid`，外层加 1×1 无边框表并设行 `cantSplit` 保持整表，表头 `tblHeader`、行不跨页；参考文献悬挂缩进 24 pt。
 - 关闭 `w:autoSpaceDE` / `w:autoSpaceDN`，禁止 `U+3000`；只保留“表 1 ”和数字与单位之间的半角空格。
+- 标题、表题、图题、表格单元格一律不设置 `keepNext`/`keepLines`/`pageBreakBefore`（会显示黑色方块）；孤行标题用显式分页符。
 - 目录先更新，再 `Unlink()` 转静态，最后删 `_Toc*` 书签；否则会出现黑色方块或“错误！未定义书签”。
 
 完整规格、构建流程、验收清单与故障表都在上述 reference 里；排完版先过一遍验收清单再交付。英文版用 Times New Roman 12 pt、首行缩进 0.5 英寸，TOC 同样按“更新 → 转静态 → 删书签”处理；详见 reference 第 10 节。

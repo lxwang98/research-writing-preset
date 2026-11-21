@@ -76,11 +76,29 @@ for tag in ("w:autoSpaceDE", "w:autoSpaceDN"):
 ### 表格
 
 - 用 Word 原生表格，样式 `Table Grid`；不要用文本框拼表。
-- 表头加粗；首行设 `w:tblHeader`，跨页自动重复表头。
-- 每一行设 `w:cantSplit`，避免一行被拆到两页。
+- **整表不跨页，不靠 `keepNext`。** 把真正的表格放进一个 1×1 无边框外层表：外层行设 `w:cantSplit`，表题也放在外层单元格内、内层表之前。这样整表（含表题）会一起移到下一页，而不会出现标题左侧的黑方块。
+- 内层表首行设 `w:tblHeader`（万一超长仍可重复表头），每一行设 `w:cantSplit`。
+- **禁止在表题、单元格、表后空段上设置 `w:keepNext`、`w:keepLines`、`w:pageBreakBefore`。** 这三者都会在 Word/WPS 中显示为黑色小方块。
 - 表题在表上方，居中；数据来源在表下方，与表同宽。
 - 列宽按内容分配，总宽不超过版心 15.8 cm；不要平均分列，否则“项目/女性/男性/目的”这类表会出现大量折行。
 - 表内文字 10.5 pt；数字右对齐或居中，文字左对齐。
+
+### 分页与黑块
+
+Word/WPS 在“显示编辑标记”打开时，会给以下段落画一个**左侧黑色小方块**：
+
+- `w:keepNext`（与下段同页）；
+- `w:keepLines`（段中不分页）；
+- `w:pageBreakBefore`（段前分页）。
+
+因此标题样式、表题、图题、表格单元格、表后空段都**不得**设置这三项。正确做法：
+
+1. 标题不锁“与下段同页”；重建后检查每个标题是否落在页底，若是，在标题前插入**手动分页符**（`doc.add_page_break()`，或 Markdown 标记 `<!-- pagebreak -->`）。
+2. 表格用上面的 1×1 外层表 + `cantSplit` 保持整表，不用 `keepNext`。
+3. 图题不锁“与下段同页”；图与图题之间不要插空段。
+4. 不要用 `pageBreakBefore` 制造章节起页，改用手动分页符。
+
+验收时 DOCX 正文 XML 的 `w:keepNext`、`w:keepLines`、`w:pageBreakBefore` 计数都应为 0；这比“PDF 里看不见”可靠。
 
 ### 图
 
@@ -132,7 +150,8 @@ project/
 - `autoSpaceDE`/`autoSpaceDN` 置 0；
 - 标题/正文/表格/参考文献样式；
 - `[[key]]` 编号与 GB/T 7714 参考文献表；
-- 表格 `cantSplit`、`tblHeader`、列宽按内容分配；
+- 表格 1×1 无边框外层表 + 内层 `Table Grid`，`cantSplit`、`tblHeader`、列宽按内容分配；
+- 标题/表题/图题/单元格不写 `keepNext`/`keepLines`/`pageBreakBefore`；孤行标题用 `<!-- pagebreak -->` 手动分页；
 - 图片按高宽比限宽。
 
 ## 8. 交付前验收清单
@@ -140,12 +159,13 @@ project/
 - [ ] 纸张 A4，页边距 2.6/2.5 cm
 - [ ] 中文楷体、英文 Times New Roman，正文 12 pt、1.5 倍行距、首行缩进 24 pt
 - [ ] 标题 18 pt，英文标题 14 pt，H1 14 pt，H2 12 pt
-- [ ] 表格 10.5 pt，表头跨页重复，行不跨页，表题在上、来源在下
+- [ ] 表格 10.5 pt，整表不跨页（1×1 外层表 + `cantSplit`），表题在上、来源在下
 - [ ] 参考文献 10.5 pt、悬挂缩进 24 pt、左对齐
 - [ ] 源码与 DOCX 中 `U+3000` 计数为 0
 - [ ] 正文没有“35 岁”“HPV 疫苗”这类多余空格；数字+单位保留一个半角空格
 - [ ] 目录页码正确，无“错误！未定义书签”，无蓝色下划线
 - [ ] DOCX 中 `bookmarkStart` 计数为 0
+- [ ] DOCX 中 `w:keepNext`、`w:keepLines`、`w:pageBreakBefore` 计数均为 0
 - [ ] PDF 渲染抽查无空心方框、无黑色方块、无表格跨页断裂
 
 ## 9. 常见故障
@@ -154,11 +174,12 @@ project/
 |---|---|---|
 | “摘□要”“[1]□文献” | 用了 U+3000 全角空格 | 改成“摘要：”“[1] 文献” |
 | 中文与数字之间有空方形 | Word 自动间距 + 楷体 | 关闭 `autoSpaceDE`/`autoSpaceDN`，并清理源码空格 |
-| 标题左侧/右侧黑方块 | `_Toc` 书签或“与下段同页”标记 | 先 unlink TOC，再删 `_Toc*`；不要先删书签 |
+| 标题左侧/右侧黑方块 | `_Toc` 书签、`keepNext`、`keepLines` 或 `pageBreakBefore` | 先 unlink TOC 并删 `_Toc*`；再清掉标题/表题/单元格/空段的 keepNext 等属性；分页改手动分页符 |
 | 目录全是“错误！未定义书签” | 删书签时 TOC 域还在 | 重新生成 TOC，先 unlink 再删 |
 | 目录蓝色带下划线 | TOC 超链接样式 | 设 `Font.Color = auto`、`Underline = none` |
-| 表题与表分页 | 表格行允许跨页 / 缺少 keep-with-next | 行 `cantSplit`，表题 `keep_with_next`，首行 `tblHeader` |
-| 表格前大片空白 | 整表 keep-with-next 把表推到下一页 | 在表前补足正文，或允许表从下一页开始；不要硬压缩行高 |
+| 表题与表分页 | 表格行允许跨页 / 表题与表分离 | 外层 1×1 无边框表 + 行 `cantSplit`，表题放外层单元格内；不要用 keepNext |
+| 表格被切成两页、只剩一行 | 移除 keepNext 后表格可在行间分页 | 用 1×1 外层表包住整表；若仍放不下，在表前补正文或手动分页 |
+| 表格前大片空白 | 整表被推到下一页 | 可接受；在表前补足正文，或把表移到更合适的位置；不要用 keepNext 硬锁 |
 | 参考文献 URL 字距被拉大 | 段落两端对齐 | 参考文献改左对齐 |
 
 ## 10. 英文版（English edition）
@@ -179,6 +200,7 @@ project/
 
 1. **TOC 书签黑块与语言无关。** 只要用 Word 的 TOC 域，就会生成 `_Toc` 书签；显示编辑标记时同样出现黑色方块。英文 DOCX 也按第 6 节执行：更新 → 设 10.5 pt/单倍行距/黑色/无下划线 → `Unlink()` → 删除 `_Toc*`。
 2. **英文中夹中文时，中文自动间距仍会作怪。** 作者名、中文参考文献、中文术语前后可能出现方形空洞；此时 `eastAsia` 用宋体或楷体，并关闭 `w:autoSpaceDE`/`w:autoSpaceDN`，同时检查 `U+3000`。
+3. **`keepNext`/`keepLines`/`pageBreakBefore` 的黑方块与语言无关。** 英文标题、`Table 1` 题注、表格单元格同样不要设置这三项；表格用 1×1 外层表 + `cantSplit`，孤行标题用显式分页符。
 
 纯英文段落没有“中文/数字自动间距”问题，但仍要检查：
 
