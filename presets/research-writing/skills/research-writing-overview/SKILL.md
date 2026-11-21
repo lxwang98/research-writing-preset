@@ -34,6 +34,7 @@ description: 科研写作模式总览与路由。把「选题 → 文献检索 �
 | 引用格式 | GB/T 7714、APA、BibTeX | `chinese-reference-formatter`、`apa-referencing` | `fetch-bib`、`wenxian`、`citation-management`、`venue-templates` |
 | 引用核验 | 查假引用、缺 DOI、BibTeX 冲突 | `citation-verifier`、`claim-source-verification` | `reference-audit-guide`、`fetch-bib` |
 | 图表 | 配图规划、期刊图规范 | `figure-planner`、`nature-figure` | `figure-style` |
+| 排版交付 | 中文期刊版 DOCX、目录、表格、字体字号 | `research-writing-overview` 的 `journal-docx-format` reference | `chinese-thesis-workbench`（学校模板优先）、`office-docx` |
 | 投稿 | 选刊、cover letter、格式审计 | `nature-portfolio-playbook`、`submission-audit` | `venue-templates`、`journal-adapt-writing` |
 | 审稿与返修 | 写审稿意见、回复审稿人 | `paper-review-pipeline`、`rebuttal-response` | `manuscript-review`、`journal-paper-review`、`peer-review-kdense`、`review-paper` |
 | 汇报答辩 | 组会/答辩 PPT | `academic-presentations` | `conference-paper-writing` |
@@ -80,7 +81,19 @@ description: 科研写作模式总览与路由。把「选题 → 文献检索 �
 - 文件命名：`<项目>_<章节>_v<n>.md`，中间产物放 `drafts/`，最终稿放 `deliverables/`，检索记录放 `search-logs/`。
 - 每次交付在回复里写清：产出文件路径、还缺什么（`[待核实]` / 占位符清单）、下一步建议。
 
-## 6. 质量门（交付前逐项过）
+## 6. 中文期刊版 DOCX 默认排版
+
+没有学校模板、但要求“期刊发表级”的中文综述/论文，按 [`references/journal-docx-format.md`](references/journal-docx-format.md) 执行。最低限度记住：
+
+- A4，左右边距 2.6 cm、上下 2.5 cm；中文楷体、英文 Times New Roman。
+- 正文 12 pt、1.5 倍行距、首行缩进 24 pt；标题 18 pt，英文标题 14 pt，H1 14 pt、H2 12 pt。
+- 表格与参考文献 10.5 pt；表格 `Table Grid`、表头跨页重复、行不跨页；参考文献悬挂缩进 24 pt。
+- 关闭 `w:autoSpaceDE` / `w:autoSpaceDN`，禁止 `U+3000`；只保留“表 1 ”和数字与单位之间的半角空格。
+- 目录先更新，再 `Unlink()` 转静态，最后删 `_Toc*` 书签；否则会出现黑色方块或“错误！未定义书签”。
+
+完整规格、构建流程、验收清单与故障表都在上述 reference 里；排完版先过一遍验收清单再交付。
+
+## 7. 质量门（交付前逐项过）
 
 - [ ] 每条参考文献都能在检索工具里复现（DOI/PMID/链接可点开）
 - [ ] 没有 `[待核实]` 残留，或已在交付说明里列明

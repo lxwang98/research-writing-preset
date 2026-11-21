@@ -21,6 +21,7 @@ Agent 预设。装上它，会话里的 Agent 就是一名科研写作助手：�
 | 文献 | 模型凭记忆报文献，容易编 | 只允许来自 `scholar-kit` / `paper-search-pro` / `multi-source-paper-search` 的真实检索结果，引用必须带 DOI / PMID / arXiv ID |
 | 写作 | 一次生成一大段 | 先确认选题与检索策略 → 证据表 `evidence.csv` → 分节写作 → 自查清单 |
 | 格式 | 泛泛地「按 APA 格式」 | GB/T 7714-2015、APA-7、MLA、Chicago、BibTeX、RIS 都有对应技能与导出脚本 |
+| 排版 | 每次重新交代字号行距 | 中文期刊版 DOCX 默认 A4、楷体/Times New Roman、小四、1.5 倍行距；目录静态无书签，表格与参考文献 10.5 pt |
 | 语种 | 中英混杂 | 英文期刊论文按目标期刊语料适配；中文毕业论文按学校模板与中文行文习惯 |
 | 改稿 | 直接覆盖原稿 | 只增不删、改动留痕，不覆盖用户原稿 |
 
@@ -41,6 +42,10 @@ Agent 预设。装上它，会话里的 Agent 就是一名科研写作助手：�
 | 去 AI 味 | `humanizer`、`humanize-academic-writing`、`deai-academic-zh`、`anti-defensive-writing` |
 
 完整清单（82 个，含上游仓库与许可证）见 [`presets/research-writing/SOURCES.md`](presets/research-writing/SOURCES.md)。
+
+中文期刊版 DOCX 的完整排版规范（页面、字体字号、表格、参考文献、静态目录、构建流程、验收清单）见
+[`journal-docx-format.md`](presets/research-writing/skills/research-writing-overview/references/journal-docx-format.md)；
+人设的「论文类型默认规范」已带硬约束，日常不必重新交代字号与行距。
 
 ## 安装
 
