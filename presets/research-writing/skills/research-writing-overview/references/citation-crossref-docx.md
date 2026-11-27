@@ -10,122 +10,143 @@
 2. **对不上。** 参考文献表重排、增删条目后，纯文本编号不会跟着变，只能全文搜一遍手改；这正是稿件里出现 `[47]` 但文献表只有 46 条的常见原因。
 3. **下游不通。** 期刊投稿系统的 HTML 版、二次排版（XML 转换、重排）与编辑部检查都按结构读引用关系；纯文本 `[12]` 在结构上不存在，一律判为“未建立引用关系”。
 
-GB/T 7714-2015 顺序编码制只规定编号与著录格式，并不要求文档内超链接。预设把它设为期刊版交付的默认项，是为了让评审用 PDF 能点、让编号变动能被脚本一次性修正，而不是逐句搜改。
+GB/T 7714-2015 顺序编码制只规定编号与著录格式，并不要求文档内超链接。预设把它设为期刊版交付的默认项，是为了让评审用 PDF 能点、让作者自己增删文献后编号能自动跟上，而不是逐句搜改。
 
-## 2. 实现方式：隐藏书签 + 内部超链接
+## 2. 两种实现，选一种
 
-Word 的“交叉引用”功能底层是 REF 域：域里缓存一份显示结果，靠书签取编号。它有两个毛病：
+| | reffield（默认） | hyperlink（静态备用） |
+|---|---|---|
+| 文献条目 | `[` + `SEQ _refnum \* ARABIC` 域 + `]` | `[12]` 纯文本 + `_Ref12` 书签 |
+| 正文引用 | `[` + `REF _Ref12 \h` 域 + `]` | `<w:hyperlink w:anchor="_Ref12">` |
+| 增删文献后编号 | **更新域即自动重排**，正文引用一起跟着变 | 不跟随，必须重跑脚本 |
+| 打开即正确 | 需要一次 `Fields.Update()`（脚本会提示；也会写入缓存值） | 是 |
+| DOCX 结构统计 | `Fields.Count` / `w:instrText` | `w:hyperlink` |
+| PDF 内链 | 有（`kind == 1`） | 有 |
+| 适用 | 作者还会继续加文献、要送审改稿 | 版式定稿、只求能点 |
 
-- 书签被删或改名后，域不更新就显示“错误！未定义书签。”；而更新域要靠 `Fields.Update()`，别人的机器上不会替你按 F9；
-- 域是“文字 + 书签引用”，转 PDF 后是链接还是死文字取决于导出时域是否已展开，不同 Word 版本表现不一致。
+**默认用 reffield。** 唯一要记住的动作是：改完文献表在 Word 里 `Ctrl+A` + `F9`（或 `Fields.Update()` 跑两遍）。域里存的是缓存值，不更新就会停在旧编号——这是域方案的代价，也是它唯一的要求。
 
-预设改用更稳的组合：
+### reffield 为什么能自动重编号
 
-| 位置 | 元素 |
-|---|---|
-| 参考文献第 *n* 条的整段 | `<w:bookmarkStart w:id="9001" w:name="_Ref1"/>` … `<w:bookmarkEnd w:id="9001"/>` |
-| 正文 `[12]` | `<w:hyperlink w:anchor="_Ref12"><w:r>…1…</w:r><w:r>…2…</w:r></w:hyperlink>` |
-
-书签 `_Ref<n>` 以 `_` 开头，Word 默认不显示（`ShowHidden = false` 时看不见），不会像 `_Toc` 那样在“显示书签”时冒出灰方块；超链接做成与正文同色、无下划线（`--style plain`），版面上就是普通 `[12]`。
-
-代价：**编号是硬编码的。** 参考文献表增删条目后必须重跑脚本，或在构建阶段就按最终编号生成。接受这个代价，是因为它换来“打开即正确、转 PDF 即正确”，不依赖任何人手动按 F9。
+- 文献条目的编号来自 `SEQ _refnum` 域：同一个 SEQ 序列名在文档里按出现顺序逐个自增，插一条进去，后面全部加一。
+- 正文引用是 `REF _Ref12 \h` 域：它不自带编号，只是去 `_Ref12` 这个书签那里取“当前内容”，而书签包住的正是那条文献的 SEQ 域。
+- 因此**书签名是稳定标识，不等于显示编号**：把一条新文献插到第 5 位，它的书签可能叫 `_Ref69`，但显示为 `[5]`；原来的第 5 条变成 `[6]`，正文里所有引用它的地方一起变成 `[6]`。
+- `\h` 让 REF 同时生成可点击链接，所以 PDF 里仍然能点。**不要加 `\n`**：`\n` 取的是“段落编号”，对没有启用自动编号的段落返回 0；有人给文献段落挂了自动编号再用 `\n`，结果正文变成 `[3]-[5]` 这种带方括号的拼接（SEQ 的 lvlText 已经含括号，外面再套一层就多出来）。
 
 ## 3. 用脚本补（推荐，构建后一步）
 
 ```bash
-python scripts/docx_cite_xref.py 稿件.docx                       # → 稿件_xref.docx
-python scripts/docx_cite_xref.py 稿件.docx --style hyperlink      # 蓝色下划线版（给线上阅读）
-python scripts/docx_cite_xref.py 稿件_xref.docx --check           # 体检：已链接/未链接/断链
+python scripts/docx_cite_xref.py 稿件.docx                        # 默认 reffield：REF/SEQ 域
+python scripts/docx_cite_xref.py 稿件.docx --style hyperlink       # 退回静态内部超链接
+python scripts/docx_cite_xref.py 稿件_xref.docx --check            # 体检：已链接/未链接/断链/域数
 python scripts/docx_cite_xref.py 稿件.docx --ref-heading "引用文献"  # 文献表标题不是“参考文献”时
 ```
 
-脚本行为：
+脚本行为（reffield）：
 
-1. 找到 `--ref-heading`（默认“参考文献”）所在段落之后的所有 `[n] 文献` 段落，按出现顺序给每条加 `_Ref<n>` 书签；已存在同号书签则跳过。
-2. 逐段扫描正文，识别 `[12]`、`[3,7]`、`[12-15]`、`[4，9]`（全角逗号也行）；编号必须落在 `1..文献条数` 内，`[2020]`、`[注]` 不会被误链。
-3. 每个数字单独包一个 `w:hyperlink w:anchor="_Ref<n>"`，方括号/逗号/连字符/`-` 保持纯文本；同一段内原有加粗、下标等格式按 run 保留。
-4. 已是超链接、含域（`w:fldChar`）、含图片、或位于表格单元格里的段落跳过，并计入 `skipped`。
-5. `--check` 只读不写：报 `plain_markers`（还没链的标记数）、`unresolved`（指向不存在书签的断链）、`refs_bookmarked`（已加书签的条目数）。
+1. 定位 `--ref-heading`（默认“参考文献”）段落，其后每个 `[n] 文献` 段落算一条，按文档顺序编号 1..N（手工插入后出现重复编号没关系，按位置算）。
+2. 把条目的 `[n]` 换成 `[{SEQ _refnum \* ARABIC}]`，并给这个 SEQ 域套上书签 `_Ref<k>`；`k` 取当前未占用的最小可用号，**已有书签的条目原样保留**，所以重跑不会打乱身份。
+3. 正文逐段识别 `[12]`、`[3,7]`、`[12-15]`、`[4，9]`（全角逗号也行），把每个数字换成 `{REF _Ref<k> \h}`；编号必须对得上某条文献，`[2020]`、`[注]` 不会被误伤。
+4. 已含域（`w:fldChar`）的段落重跑时整段跳过，不会二次包裹；方括号、逗号、连字符始终是纯文本，版面上仍是 `[12]`。
+5. 域 run 一律写 `w:color auto` + `w:u none`，不出现蓝色下划线。
 
-退出码：存在断链或书签条目数少于编号最大值时返回 1。
+`--check` 只读，报告：`plain_markers`（还没链的标记数）、`unresolved`（指向不存在书签的断链）、`refs_numbered`（已编号条目数）、`ref_fields`（REF 域数）、`refs_bookmarked`。有未链接或断链时退出码 1。
 
 ## 4. 构建阶段直接写（自己在 `build_docx.py` 里做）
-
-按首次出现编号的构建脚本有天然优势：编号在生成时就定了，可以在写 run 的同时写元素。
 
 ```python
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+import copy
 
 BID = [9000]
 
-def add_ref_bookmark(p, n):
-    """给参考文献段落 p 加 _Ref<n> 书签，包住整段。"""
+def make_run(text, rpr=None):
+    r = OxmlElement("w:r")
+    if rpr is not None:
+        r.append(copy.deepcopy(rpr))
+    t = OxmlElement("w:t"); t.text = text; t.set(qn("xml:space"), "preserve")
+    r.append(t)
+    return r
+
+def field_runs(instr, cached, rpr=None):
+    """begin / instrText / separate / 缓存结果 / end"""
+    out = []
+    for kind in ("begin", "instr", "separate", "text", "end"):
+        r = OxmlElement("w:r")
+        if rpr is not None:
+            r.append(copy.deepcopy(rpr))
+        if kind == "instr":
+            it = OxmlElement("w:instrText")
+            it.set(qn("xml:space"), "preserve"); it.text = instr; r.append(it)
+        elif kind == "text":
+            r.append(make_run(cached, rpr).find(qn("w:t")))
+        else:
+            fc = OxmlElement("w:fldChar"); fc.set(qn("w:fldCharType"), kind); r.append(fc)
+        out.append(r)
+    return out
+
+def add_ref_entry(p, n, bm):
+    """参考文献段落：'[' + {SESSION SEQ} + ']' + 正文；书签只包 SEQ。"""
     BID[0] += 1
     start = OxmlElement("w:bookmarkStart")
-    start.set(qn("w:id"), str(BID[0]))
-    start.set(qn("w:name"), f"_Ref{n}")
-    pPr = p._p.pPr
-    if pPr is not None:
-        pPr.addnext(start)          # 必须在 pPr 之后，否则 Word 报文档损坏
-    else:
-        p._p.insert(0, start)
-    end = OxmlElement("w:bookmarkEnd")
-    end.set(qn("w:id"), str(BID[0]))
+    start.set(qn("w:id"), str(BID[0])); start.set(qn("w:name"), bm)
+    p._p.append(make_run("["))
+    p._p.append(start)
+    for r in field_runs(" SEQ _refnum \\* ARABIC ", str(n)):
+        p._p.append(r)
+    end = OxmlElement("w:bookmarkEnd"); end.set(qn("w:id"), str(BID[0]))
     p._p.append(end)
+    p._p.append(make_run("] " + citation_text))
 
-def add_cite_run(p, n, text="[" + str(n) + "]"):
-    """正文里放一个可点击的 [n]。"""
-    hl = OxmlElement("w:hyperlink")
-    hl.set(qn("w:anchor"), f"_Ref{n}")
-    for ch in text:
-        r = OxmlElement("w:r")
-        rPr = OxmlElement("w:rPr")
-        color = OxmlElement("w:color"); color.set(qn("w:val"), "auto"); rPr.append(color)
-        u = OxmlElement("w:u"); u.set(qn("w:val"), "none"); rPr.append(u)
-        r.append(rPr)
-        t = OxmlElement("w:t"); t.text = ch; t.set(qn("xml:space"), "preserve")
-        r.append(t)
-        hl.append(r)
-    p._p.append(hl)
+def add_cite_run(p, bm, cached):
+    """正文放一个可点击的 [n]：'[' + {REF} + ']'。"""
+    p._p.append(make_run("["))
+    for r in field_runs(f" REF {bm} \\h ", cached):
+        p._p.append(r)
+    p._p.append(make_run("]"))
 ```
 
-按字符拆 run 是为了让每个数字都能单独定位；整串 `[12]` 放一个 run 也能链，但相邻的 `[12][13]` 会粘成一个链接。
+按字符拆 run 是为了让区间 `[12-15]`、并列 `[3,7]` 里的每个数字各自是一个域；整串 `[12]` 放一个域也能显示，但 `[12,13]` 会变成“一个链接跳到第 12 条”，第二条点不到。
 
 ## 5. 与目录规则的关系（最容易踩）
 
-`journal-docx-format.md` 第 6 节要求删掉 `_Toc*` 书签，因为它们在“显示书签/编辑标记”下是黑色方块。**这条只针对 `_Toc*`。** 若照旧清单“把 `bookmarkStart` 全清零”，`_Ref*` 会一并消失，正文链接全部变成“错误！未定义书签”。
+`journal-docx-format.md` 第 6 节要求删掉 `_Toc*` 书签，因为它们在“显示书签/编辑标记”下是黑色方块。**这条只针对 `_Toc*`。** 若照旧清单“把 `bookmarkStart` 全清零”，`_Ref*` 会一并消失，正文引用全部变成“错误！未定义书签”。
 
 正确顺序：
 
-1. 构建 DOCX → 跑 `docx_cite_xref.py`；
-2. Word 里更新 TOC → 设 10.5 pt/单倍行距/黑色/无下划线 → `Unlink()` → 删 `_Toc*`；
+1. 构建 DOCX → 跑 `docx_three_line_table.py`（表格）→ 跑 `docx_cite_xref.py`（引用）；
+2. Word 里 `Fields.Update()` 两次 → 更新 TOC → 设 10.5 pt/单倍行距/黑色/无下划线 → `Unlink()` → 删 `_Toc*`；
 3. 保存、导出 PDF；
-4. 验收：`_Toc*` = 0，`_Ref*` = 参考文献条数，`w:hyperlink` ≥ 引用标记处数。
+4. 验收：`_Toc*` = 0，`_Ref*` = 参考文献条数，`REF` 域数 = 引用处数字个数，`SEQ` 域数 = 文献条数。
 
 ## 6. 验收
 
 ```python
 import zipfile, re, pymupdf
 
-x = zipfile.ZipFile("稿件_v2.docx").read("word/document.xml").decode()
+x = zipfile.ZipFile("稿件_v3.docx").read("word/document.xml").decode()
 names = re.findall(r'<w:bookmarkStart[^>]*w:name="([^"]+)"', x)
 print("_Ref:", sum(n.startswith("_Ref") for n in names),
       "_Toc:", sum(n.startswith("_Toc") for n in names),
-      "hyperlink:", x.count("<w:hyperlink"))
+      "REF 域:", len(re.findall(r"REF\s+(_Ref\d+)", x)),
+      "SEQ 域:", len(re.findall(r"SEQ\s+_refnum", x)))
 
-pdf = pymupdf.open("稿件_v2.pdf")
+pdf = pymupdf.open("稿件_v3.pdf")
 links = [l for pg in pdf for l in pg.get_links() if l.get("kind") == 1]
 print("PDF 内链:", len(links), "目标页:", sorted({l["page"] + 1 for l in links})[:5])
 ```
 
-通过标准：DOCX 内 `w:hyperlink` 与正文标记处数相当（区间 `[12-15]` 会产生多个链接，因此通常略多）；PDF 内链数与之相符；参考文献起始页出现在目标页集合里；全文搜“错误！未定义书签”为 0。
+通过标准：`REF` 域数 = 正文引用处数字个数（`[3-5]` 算 2 个）、`SEQ` 域数 = 文献条数、`_Toc*` = 0、PDF 内链数与 REF 域数一致、参考文献起始页出现在目标页集合里、全文搜“错误！未定义书签”为 0。
 
-Word 内另可看 `ActiveDocument.Hyperlinks.Count`，以及按住 Ctrl 点 `[12]` 是否落到对应条目。
+Word 内另可看 `ActiveDocument.Fields.Count`（应为 REF + SEQ 之和），以及按住 Ctrl 点 `[12]` 是否落到对应条目。
+
+**投稿要纯文本时再降级**：Word 里 `Ctrl+A` + `Ctrl+Shift+F9` 把所有域转成文字，此时编号定死、链接消失——只在期刊系统不收域、或审稿要匿名文本版时做，别把这一步留在正常交付里。
 
 ## 7. 已知边界
 
 - 只认阿拉伯数字方括号。作者-年份制（APA）的 `(Smith, 2020)` 不在处理范围；此时应改用书签锚的 `(Smith, 2020)` 链接，脚本不支持。
-- 不判断编号是否指向“正确”的那条文献——那是内容问题，靠 `claim-source-verification` 和人工核。脚本只保证“点得动、不落空”。
+- 不判断编号是否指向“正确”的那条文献——那是内容问题，靠 `claim-source-verification` 和人工核。脚本只保证“点得动、编号对得上”。
+- 手工在 Word 里插入的新条目，如果只是纯文本 `[5] …`，**再跑一次脚本**才会变成 SEQ 域；不跑的话它不参与计数，可能出现两个 `[5]`。同理，正文里手打的新编号 `[69]` 要重跑脚本才成域。
 - 合并 PDF（`merge_pdfs.py`）会保留页内链接，但**页码目标会失效**：内链指向原分册的页码，合并后页码变了。要么在合并前转成文字，要么在合并后按“文献标题”重建链接；系列综述合订本建议以分册 PDF 交付为主。
 - 参考文献表若用制表符/表格排版，书签仍能加，但 Word 的“跳转”只能定位到行首，观感略差；优先用普通段落 + 悬挂缩进。

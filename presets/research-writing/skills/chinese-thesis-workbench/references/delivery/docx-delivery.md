@@ -64,16 +64,27 @@ python scripts/docx/generate_thesis_docx.py thesis.md output/thesis.docx --image
 
 生成器不提供学校模板匹配参数。样文版式贴近只是高置信样式值合并，不是模板复刻。学校模板应走 `--from-template` 副本填充路径。
 
+## 三线表
+
+论文里的表一律三线表：顶线与底线同粗、栏目线（表头下那条）更细、其余边框去掉。生成器默认给的是 `Table Grid`（满格网格），所以生成后补一步：
+
+```powershell
+python <预设>/research-writing-overview/scripts/docx_three_line_table.py output/thesis.docx
+python <预设>/research-writing-overview/scripts/docx_three_line_table.py output/thesis_3line.docx --check
+```
+
+默认顶线/底线 1.5 pt、栏目线 0.75 pt；学校模板规定 2.25 pt / 1.5 pt 的，用 `--thick 2.25 --thin 1.5` 覆盖。两行表头用 `--header-rows 2`，栏目线会画在第二行下面。`--check` 应退出码 0（无 `tblStyle`、insideH/insideV 为 `none`）。1×1 无边框外层排版表脚本会自动跳过，不会把外层框线也变成粗线。
+
 ## 引用与参考文献的交叉引用
 
-生成器输出的是纯文本标号 `[12]`。送审版、盲审版以及多数学校的提交要求里，正文标号要能跳到文献表，所以生成后补一步：
+生成器输出的是纯文本标号 `[12]`。送审版、盲审版以及多数学校的提交要求里，正文标号要能跳到文献表，而且用户往往会在 Word 里继续加文献，所以编号还得跟着变：
 
 ```powershell
 python <预设>/research-writing-overview/scripts/docx_cite_xref.py output/thesis.docx
 python <预设>/research-writing-overview/scripts/docx_cite_xref.py output/thesis_xref.docx --check
 ```
 
-第二条命令应报"未链接 0 / 断链 0"。文献表标题不是"参考文献"时加 `--ref-heading`。脚本只加隐藏书签 `_Ref<n>` 与内部超链接，不改字号、行距、缩进；M1/M3 生成后都能跑。
+默认 `--style reffield`：文献表条目写成 `SEQ _refnum` 域（套隐藏书签 `_Ref<n>`），正文 `[n]` 写成 `REF _Ref<n> \h` 域。加完文献在 Word 里 `Ctrl+A` + `F9`（或更新域两次），后面编号与正文引用一起后移。第二条命令应报"未链接 0 / 断链 0"，并给出 REF 域数（= 引用处数字个数）与 SEQ 域数（= 文献条数）。文献表标题不是"参考文献"时加 `--ref-heading`。版式已定稿、不需要自动重编号时用 `--style hyperlink`（静态内部超链接，蓝色下划线）。脚本不改字号、行距、缩进；M1/M3 生成后都能跑。
 
 配合 Word 的收尾顺序：更新目录 → 转静态 → **只删 `_Toc*` 书签**，`_Ref*` 必须保留，否则链接会变成"错误！未定义书签"。做法、验收命令与已知边界见 `research-writing-overview/references/citation-crossref-docx.md`。
 

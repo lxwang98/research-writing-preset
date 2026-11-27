@@ -281,6 +281,84 @@ def normalize_text(text: str) -> str:
     return cleanup_inline_markdown(text)
 
 
+TBLPR_ORDER = (
+    "w:tblStyle", "w:tblpPr", "w:tblOverlap", "w:bidiVisual", "w:tblStyleRowBandSize",
+    "w:tblStyleColBandSize", "w:tblW", "w:jc", "w:tblCellSpacing", "w:tblInd",
+    "w:tblBorders", "w:shd", "w:tblLayout", "w:tblCellMar", "w:tblLook",
+    "w:tblCaption", "w:tblDescription",
+)
+TCPR_ORDER = (
+    "w:cnfStyle", "w:tcW", "w:gridSpan", "w:hMerge", "w:vMerge", "w:tcBorders",
+    "w:shd", "w:noWrap", "w:tcMar", "w:textDirection", "w:tcFitText", "w:vAlign",
+    "w:hideMark",
+)
+TRPR_ORDER = (
+    "w:cnfStyle", "w:divId", "w:gridBefore", "w:gridAfter", "w:wBefore", "w:wAfter",
+    "w:cantSplit", "w:trHeight", "w:tblHeader", "w:tblCellSpacing", "w:jc",
+    "w:hidden",
+)
+
+
+def insert_ordered(parent, child, order: tuple[str, ...]) -> None:
+    names = [qn(name) for name in order]
+    try:
+        idx = names.index(child.tag)
+    except ValueError:
+        parent.append(child)
+        return
+    for existing in parent:
+        if existing.tag in names and names.index(existing.tag) > idx:
+            existing.addprevious(child)
+            return
+    parent.append(child)
+
+
+def _border_el(tag: str, val: str, size_pt: float | None = None):
+    el = OxmlElement(tag)
+    el.set(qn("w:val"), val)
+    if val != "none":
+        el.set(qn("w:sz"), str(round((size_pt or 0) * 8)))
+        el.set(qn("w:space"), "0")
+        el.set(qn("w:color"), "000000")
+    return el
+
+
+def apply_three_line_borders(table, thick_pt: float = 1.5, thin_pt: float = 0.75) -> None:
+    """把表格改成三线表：顶线=底线=thick_pt，表头下栏目线=thin_pt，其余边框去掉。
+
+    `Table Grid` 样式会让表格渲染成满格网格；这里不设样式，直接写 tblBorders。
+    """
+    tbl_pr = table._tbl.tblPr
+    for old in tbl_pr.findall(qn("w:tblStyle")):
+        tbl_pr.remove(old)
+    for old in tbl_pr.findall(qn("w:tblBorders")):
+        tbl_pr.remove(old)
+    borders = OxmlElement("w:tblBorders")
+    borders.append(_border_el("w:top", "single", thick_pt))
+    borders.append(_border_el("w:left", "none"))
+    borders.append(_border_el("w:bottom", "single", thick_pt))
+    borders.append(_border_el("w:right", "none"))
+    borders.append(_border_el("w:insideH", "none"))
+    borders.append(_border_el("w:insideV", "none"))
+    insert_ordered(tbl_pr, borders, TBLPR_ORDER)
+
+    for row in table.rows:
+        tr_pr = row._tr.get_or_add_trPr()
+        if tr_pr.find(qn("w:cantSplit")) is None:
+            insert_ordered(tr_pr, OxmlElement("w:cantSplit"), TRPR_ORDER)
+    header = table.rows[0]
+    header_tr_pr = header._tr.get_or_add_trPr()
+    if header_tr_pr.find(qn("w:tblHeader")) is None:
+        insert_ordered(header_tr_pr, OxmlElement("w:tblHeader"), TRPR_ORDER)
+    for cell in header.cells:
+        tc_pr = cell._tc.get_or_add_tcPr()
+        for old in tc_pr.findall(qn("w:tcBorders")):
+            tc_pr.remove(old)
+        tc_borders = OxmlElement("w:tcBorders")
+        tc_borders.append(_border_el("w:bottom", "single", thin_pt))
+        insert_ordered(tc_pr, tc_borders, TCPR_ORDER)
+
+
 def add_markdown_table(doc: Document, lines: list[str], styles: dict[str, Any]) -> None:
     rows = []
     for row in lines:
@@ -293,8 +371,8 @@ def add_markdown_table(doc: Document, lines: list[str], styles: dict[str, Any]) 
     headers = rows[0]
     data_rows = rows[1:]
     table = doc.add_table(rows=1 + len(data_rows), cols=len(headers))
-    table.style = "Table Grid"
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = True
     for idx, text in enumerate(headers):
         table.rows[0].cells[idx].text = text
     for row_index, row in enumerate(data_rows, start=1):
@@ -306,6 +384,7 @@ def add_markdown_table(doc: Document, lines: list[str], styles: dict[str, Any]) 
             cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
             for paragraph in cell.paragraphs:
                 apply_paragraph_style(paragraph, styles["table_text"])
+    apply_three_line_borders(table)
 
 
 def apply_keyword_runs(paragraph, label: str, content: str, styles: dict[str, Any]) -> None:

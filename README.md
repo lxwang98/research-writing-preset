@@ -148,7 +148,8 @@ research-writing-preset/
    ├─ skills/<kebab-name>/SKILL.md    # 一层目录一个技能
    ├─ skills/research-writing-overview/scripts/
    │  ├─ numeral_lint.py              # 纪年/数字体检：〇、○、全角数字、纪年混用
-   │  └─ docx_cite_xref.py            # 正文 [n] 与参考文献建立交叉引用
+   │  ├─ docx_three_line_table.py     # 表格改三线表：顶/底同粗、栏目线更细
+   │  └─ docx_cite_xref.py            # 正文 [n] 与参考文献建立交叉引用（编号自动重排）
    ├─ SOURCES.md                      # 每个技能的上游仓库、许可证与用途
    └─ LICENSES/<owner>__<repo>.txt    # 上游许可原文
 ```
@@ -159,13 +160,15 @@ research-writing-preset/
 
 ## 排版体检脚本
 
-排版规范里有两类错误光靠人设约束拦不住，所以做成了脚本（`presets/research-writing/skills/research-writing-overview/scripts/`）：
+排版规范里有三类错误光靠人设约束拦不住，所以做成了脚本（`presets/research-writing/skills/research-writing-overview/scripts/`）：
 
 - **纪年写成 `一九二O年`**。根因不是模型把「零」打错，而是它选了 U+3007「〇」——楷体下就是一个裸圆环，和拉丁大写 O 无法区分。`numeral_lint.py` 扫 `〇`(U+3007)、`○`(U+25CB)、`◯`(U+25EF)、汉字数字旁的拉丁 O、全角数字，并提示汉字纪年与阿拉伯纪年混用；`--fix` 把 `〇`/`○` 换成「零」，另存 `*_fixed`，不动原件。
-- **正文 `[n]` 与文末文献表没有交叉引用**。旧规范第 8 节还要求「`bookmarkStart` 计数为 0」，等于禁止了交叉引用所需的书签。`docx_cite_xref.py` 给文献条目加隐藏书签 `_Ref<n>`、把正文 `[n]`/`[3-5]`/`[6,9]` 包成内部超链接（版面仍是黑色 `[12]`），`--check` 报告已链接/未链接/断链数。
+- **表格不是三线表**。默认样式（`Table Grid`）会给表格加上满格网格和竖线，期刊与学位论文都要三线表：顶线与底线同粗、栏目线更细、其余边框去掉。`docx_three_line_table.py` 删样式、写 `tblBorders`（默认 1.5 pt / 0.75 pt，`--thick`/`--thin` 可改），1×1 排版外层表自动跳过；`--check` 不合规退出码 1。
+- **正文 `[n]` 与文末文献表没有交叉引用**。旧规范第 8 节还要求「`bookmarkStart` 计数为 0」，等于禁止了交叉引用所需的书签。`docx_cite_xref.py` 默认 `--style reffield`：文献条目编号用 `SEQ _refnum` 域 + 隐藏书签 `_Ref<n>`，正文 `[n]`/`[3-5]`/`[6,9]` 用 `REF _Ref<n> \h` 域（版面仍是黑色 `[12]`）。**在 Word 里加一条文献、全选 F9，后面编号和正文引用一起后移**；`--style hyperlink` 是静态备用方案。
 
 ```powershell
 python scripts/numeral_lint.py 稿件.docx
+python scripts/docx_three_line_table.py 稿件.docx --check
 python scripts/docx_cite_xref.py 稿件.docx --check
 ```
 
@@ -210,6 +213,15 @@ python scripts/docx_cite_xref.py 稿件.docx --check
 **Q：能只用中文毕业论文那一套吗？**
 可以。装上后直接说「我要写中文毕业论文，学校模板是 XX」，Agent 会走 `chinese-thesis-workbench` 那条链，
 不碰英文期刊技能。
+
+**Q：我在 Word 里自己加了一条文献，正文编号会乱吗？**
+不会，前提是走 `--style reffield`（默认）。文献表编号是 `SEQ` 域、正文引用是 `REF` 域，加完文献在 Word 里
+`Ctrl+A` + `F9`（或更新域两次），后面编号与正文引用一起后移。纯文本 `[n]` 或 `--style hyperlink` 不会跟，
+那种情况要重跑脚本。手打的新条目也要重跑一次脚本才会变成域，否则会出现两个相同编号。
+
+**Q：三线表的线宽是固定的吗？**
+默认顶线/底线 1.5 pt、栏目线 0.75 pt（常州大学等模板的通行值；GB/T 7713.1—2006 只建议三线表，不规定磅值）。
+学校模板另有规定就用 `--thick 2.25 --thin 1.5` 覆盖。
 
 **Q：技能目录会不会太占上下文？**
 不会全量加载：人设要求先读 `research-writing-overview` 路由表，再按阶段只加载需要的 2–3 个技能，

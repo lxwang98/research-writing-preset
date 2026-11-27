@@ -79,13 +79,16 @@ for tag in ("w:autoSpaceDE", "w:autoSpaceDN"):
 
 ### 表格
 
-- 用 Word 原生表格，样式 `Table Grid`；不要用文本框拼表。
+- **一律用三线表**，不用满格网格。顶线、底线各 1.5 pt（两条粗线粗细相同），表头下的栏目线 0.75 pt（约为粗线一半）；不画竖线，也不画其余横线。GB/T 7713.1—2006 只写“建议采用国际通行的三线表”，不规定磅值；1.5/0.75 是期刊与多数高校学位论文模板的通行值（常州大学、上海交大等模板明文写“标题行上框线 1.5 磅、下框线 0.75 磅”）。学校或期刊模板另有规定时以模板为准，脚本用 `--thick` / `--thin` 改。
+- 实现方式：**删掉 `tblStyle`（尤其 `Table Grid`）**，改由 `tblBorders` 给 top/bottom `single` 粗线、left/right/insideH/insideV `none`；再给表头行 `tcBorders/w:bottom` 一条细线。只删样式不写 `tblBorders`，在部分 Word 版本里会退回默认网格，所以两项要一起做。
+- 不要用文本框拼表；外层 1×1 排版表**不加**三线，脚本会自动跳过 1×1 表。
 - **整表不跨页，不靠 `keepNext`。** 把真正的表格放进一个 1×1 无边框外层表：外层行设 `w:cantSplit`，表题也放在外层单元格内、内层表之前。这样整表（含表题）会一起移到下一页，而不会出现标题左侧的黑方块。
 - 内层表首行设 `w:tblHeader`（万一超长仍可重复表头），每一行设 `w:cantSplit`。
 - **禁止在表题、单元格、表后空段上设置 `w:keepNext`、`w:keepLines`、`w:pageBreakBefore`。** 这三者都会在 Word/WPS 中显示为黑色小方块。
 - 表题在表上方，居中；数据来源在表下方，与表同宽。
 - 列宽按内容分配，总宽不超过版心 15.8 cm；不要平均分列，否则“项目/女性/男性/目的”这类表会出现大量折行。
 - 表内文字 10.5 pt；数字右对齐或居中，文字左对齐。
+- 三线表不要靠肉眼确认：跑 `scripts/docx_three_line_table.py --check`（见第 11 节）。
 
 ### 分页与黑块
 
@@ -145,10 +148,11 @@ project/
 步骤：
 
 1. `python tools/build_docx.py "01-主题.md" refs.json "01-主题.docx"`
-2. `python <预设>/research-writing-overview/scripts/docx_cite_xref.py "01-主题.docx"` —— 给参考文献条目加 `_Ref<n>` 书签，把正文 `[n]` 变成指向该书签的内部超链接（说明见 `citation-crossref-docx.md`）。
-3. Word COM 打开 DOCX，更新 TOC，按第 6 节转静态、只删 `_Toc*`，`ExportAsFixedFormat(pdf, 17)`。
-4. `python tools/merge_pdfs.py` 合并各分册，写入一级书签。
-5. 用 PyMuPDF 渲染 2–3 页抽查：摘要页、表格页、参考文献页；再点名抽查几条 `[n]`，看链接是否跳到对应文献条目。
+2. `python <预设>/research-writing-overview/scripts/docx_three_line_table.py "01-主题.docx"` —— 把 `Table Grid` 网格表改成三线表（顶线=底线 1.5 pt、栏目线 0.75 pt），1×1 排版外层表自动跳过（规范见第 5 节）。
+3. `python <预设>/research-writing-overview/scripts/docx_cite_xref.py "01-主题.docx"` —— 默认 `--style reffield`：文献条目变成 `[` + `SEQ` 域 + `]` 并加 `_Ref` 书签，正文 `[n]` 变成 `REF` 域；插入新文献后更新域即自动重编号（说明见 `citation-crossref-docx.md`）。
+4. Word COM 打开 DOCX，先 `Fields.Update()` 两次（域是缓存值，不更新就是旧编号），再更新 TOC，按第 6 节转静态、只删 `_Toc*`，`ExportAsFixedFormat(pdf, 17)`。
+5. `python tools/merge_pdfs.py` 合并各分册，写入一级书签。
+6. 用 PyMuPDF 渲染 2–3 页抽查：摘要页、表格页、参考文献页；再点名抽查几条 `[n]`，看链接是否跳到对应文献条目。
 
 `build_docx.py` 至少要实现：
 
@@ -157,8 +161,9 @@ project/
 - `autoSpaceDE`/`autoSpaceDN` 置 0；
 - 标题/正文/表格/参考文献样式；
 - `[[key]]` 编号与 GB/T 7714 参考文献表；
-- 正文引用与参考文献条目的交叉引用，二选一：构建时直接写（`_Ref<n>` 书签 + `w:hyperlink w:anchor`），或构建后跑 `scripts/docx_cite_xref.py` 补上；
-- 表格 1×1 无边框外层表 + 内层 `Table Grid`，`cantSplit`、`tblHeader`、列宽按内容分配；
+- 表格按三线表写（`tblBorders` + 表头 `tcBorders`，不用 `Table Grid`），或构建后跑 `scripts/docx_three_line_table.py`；
+- 正文引用与参考文献条目的交叉引用，优先构建后跑 `scripts/docx_cite_xref.py`（REF/SEQ 域，编号自动跟随）；纯版式需求才退回 `--style hyperlink`；
+- 表格 1×1 无边框外层表 + 内层三线表，`cantSplit`、`tblHeader`、列宽按内容分配；
 - 标题/表题/图题/单元格不写 `keepNext`/`keepLines`/`pageBreakBefore`；孤行标题用 `<!-- pagebreak -->` 手动分页；
 - 图片按高宽比限宽。
 
@@ -168,13 +173,15 @@ project/
 - [ ] 中文楷体、英文 Times New Roman，正文 12 pt、1.5 倍行距、首行缩进 24 pt
 - [ ] 标题 18 pt，英文标题 14 pt，H1 14 pt，H2 12 pt
 - [ ] 表格 10.5 pt，整表不跨页（1×1 外层表 + `cantSplit`），表题在上、来源在下
+- [ ] 表格是三线表：无 `tblStyle`（尤其 `Table Grid`），顶线=底线 1.5 pt、栏目线 0.75 pt，`insideH`/`insideV`/`left`/`right` 均为 `none`（`scripts/docx_three_line_table.py --check` 退出码 0）
 - [ ] 参考文献 10.5 pt、悬挂缩进 24 pt、左对齐
 - [ ] 源码与 DOCX 中 `U+3000` 计数为 0
 - [ ] 源码与 DOCX 中 `U+3007`（〇）、`○`、`◯`、全角数字计数为 0；纪年写作「一九二零」或「1920」，全篇纪年体例统一
 - [ ] 正文没有“35 岁”“HPV 疫苗”这类多余空格；数字+单位保留一个半角空格
 - [ ] 目录页码正确，无“错误！未定义书签”，无蓝色下划线
 - [ ] DOCX 中 `_Toc*` 书签计数为 0（`_Ref*` 交叉引用书签要保留，数量 = 参考文献条数）
-- [ ] 正文 `[n]`/`[n,m]`/`[n-m]` 都能点，指向对应文献条目；`w:hyperlink` 计数 ≥ 引用标记处数，断链为 0
+- [ ] 正文 `[n]`/`[n,m]`/`[n-m]` 都能点，指向对应文献条目：REF 域数 = 引用处数字个数、SEQ 域数 = 文献条数、断链为 0（`scripts/docx_cite_xref.py --check` 退出码 0）
+- [ ] 自动编号成立：在 Word 里插入一条文献、全选 F9，后续编号与正文引用一起后移
 - [ ] DOCX 中 `w:keepNext`、`w:keepLines`、`w:pageBreakBefore` 计数均为 0
 - [ ] PDF 渲染抽查无空心方框、无黑色方块、无表格跨页断裂
 
@@ -192,8 +199,12 @@ project/
 | 表格前大片空白 | 整表被推到下一页 | 可接受；在表前补足正文，或把表移到更合适的位置；不要用 keepNext 硬锁 |
 | 参考文献 URL 字距被拉大 | 段落两端对齐 | 参考文献改左对齐 |
 | “一九二O年”“一九二〇年” | 纪年里的零用了 `U+3007` 〇（或拉丁 O、○ U+25CB） | 源码改「零」；整篇也可改阿拉伯数字，但不要一半汉字一半阿拉伯；跑 `scripts/numeral_lint.py` |
-| 正文 `[12]` 点了不跳转 | 引用是纯文本，没有书签与内部超链接 | 跑 `scripts/docx_cite_xref.py`；顺序是先加书签、再加链接 |
-| 点引用提示“错误！未定义书签” | `_Ref*` 书签被删（例如按旧清单把 `bookmarkStart` 全部清掉） | 只删 `_Toc*`，保留 `_Ref*`；断了就重跑脚本 |
+| 表格是满格网格、有竖线 | 用了 `Table Grid`，或只删了 `tblStyle` 没写 `tblBorders` | 跑 `scripts/docx_three_line_table.py`：顶/底 1.5 pt、栏目线 0.75 pt、其余 `none` |
+| 三线表栏目线跟顶线一样粗 | 表头行没写 `tcBorders/w:bottom`，或把 0.75 写成 1.5 | 栏目线 0.75 pt，顶线/底线 1.5 pt（学校模板另规定时按其值） |
+| 正文 `[12]` 点了不跳转 | 引用是纯文本，没有书签与超链接/域 | 跑 `scripts/docx_cite_xref.py`（默认 `--style reffield`） |
+| 点引用提示“错误！未定义书签” | `_Ref*` 书签被删（例如按旧清单把 `bookmarkStart` 全部清掉），或 REF 指向的书签不存在 | 只删 `_Toc*`，保留 `_Ref*`；断了就重跑脚本 |
+| 插入新文献后正文编号错位 | 正文是纯文本或 `\n` 段落编号，没有 SEQ/REF 域 | 用 reffield 方案；加完文献在 Word 里 Ctrl+A、F9 更新域 |
+| 引用显示的是旧编号 | 加了文献却没更新域（域里是缓存值） | `Fields.Update()` 两次，或全选 F9 |
 
 ## 10. 英文版（English edition）
 
@@ -227,7 +238,7 @@ project/
 
 ## 11. 配套脚本（本技能 `scripts/` 目录）
 
-排版规范里“能查、能改”的部分不靠肉眼，也不靠模型自觉，落成两个脚本，构建前后各跑一次。
+排版规范里“能查、能改”的部分不靠肉眼，也不靠模型自觉，落成三个脚本，构建前后各跑一次。
 
 ### `numeral_lint.py` —— 纪年与数字扫描
 
@@ -240,14 +251,27 @@ python scripts/numeral_lint.py 01-主题.md --fix     # 把 〇/○ 换成「零
 
 检查项：`E3007`（U+3007 〇）、`ECIRCLE`（○ U+25CB / ◯ U+25EF）、`ELATIN_O`（汉字数字旁的拉丁 O/o）、`EDIGIT_O`（`192O` 这类）、`EFULL_O`（全角 Ｏ）、`W_FULLDIG`（全角数字）、`W_ERA`（汉字纪年与阿拉伯纪年混用的警告，不计入退出码）。有 error 时退出码为 1，可直接接进构建脚本。
 
+### `docx_three_line_table.py` —— 表格改三线表
+
+```bash
+python scripts/docx_three_line_table.py 01-主题.docx                 # 输出 01-主题_3line.docx
+python scripts/docx_three_line_table.py 01-主题.docx --check          # 只体检，不合规退出码 1
+python scripts/docx_three_line_table.py 01-主题.docx --thick 2.25 --thin 1.5   # 按学校模板改磅值
+python scripts/docx_three_line_table.py 01-主题.docx --header-rows 2  # 两行表头，栏目线画在第二行下
+```
+
+做法：删掉 `tblStyle`（`Table Grid` 就是它让表格变成满格网格），写 `tblBorders`：top/bottom `single` 粗线、left/right/insideH/insideV `none`；表头行写 `tcBorders/w:bottom` 细线（只写 bottom，避免盖住表格顶线）；顺手补 `cantSplit` 与 `tblHeader`。1×1 排版外层表自动跳过，不会把外层框线也变成粗线。
+
 ### `docx_cite_xref.py` —— 引用与参考文献交叉引用
 
 ```bash
-python scripts/docx_cite_xref.py 01-主题.docx                  # 输出 01-主题_xref.docx
-python scripts/docx_cite_xref.py 01-主题.docx --style hyperlink # 蓝色下划线（默认 plain：与正文同色、无下划线）
-python scripts/docx_cite_xref.py 01-主题_xref.docx --check      # 复查：已链接/未链接/断链
+python scripts/docx_cite_xref.py 01-主题.docx                    # 默认 reffield：REF/SEQ 域，编号自动跟随
+python scripts/docx_cite_xref.py 01-主题.docx --style hyperlink   # 退回静态内部超链接（蓝色下划线）
+python scripts/docx_cite_xref.py 01-主题_xref.docx --check        # 复查：已链接/未链接/断链/域数
 ```
 
-做法：参考文献第 *n* 条的段落加隐藏书签 `_Ref<n>`；正文 `[n]`、`[n,m]`、`[n-m]` 里的每个数字包进 `<w:hyperlink w:anchor="_Ref<n>">`，方括号、逗号、连字符保持纯文本，所以版面上仍是 `[12]`。只处理编号落在 1..文献条数 范围内的方括号，`[2020]` 这类不会误伤；已含超链接、域或图片的段落会跳过并计数。
+reffield 做法：参考文献第 *n* 条改成 `[` + `SEQ _refnum \* ARABIC` 域 + `]`，隐藏书签 `_Ref<n>` 只包住那个 SEQ 域；正文 `[n]` 变成 `[` + `REF _Ref<n> \h` + `]`，`[3-5]` 变成两个 REF 中间夹连字符，版面上仍显示 `[12]`、`[3-5]`。**书签名是稳定标识、不等于显示编号**：插入一条新文献并更新域后，新条目接在序列里，后续编号与正文引用一起后移。只处理编号落在 1..文献条数 范围内的方括号，`[2020]` 不会误伤；已转成域的段落重跑时跳过，不会重复包裹。
+
+`--style hyperlink` 是静态备用：书签 + `w:hyperlink w:anchor`，点得动但编号是死文本，增删文献要重跑脚本。
 
 局限与范围详见 `citation-crossref-docx.md`。
