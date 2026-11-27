@@ -115,10 +115,11 @@ def add_cite_run(p, bm, cached):
 
 正确顺序：
 
-1. 构建 DOCX → 跑 `docx_three_line_table.py`（表格）→ 跑 `docx_cite_xref.py`（引用）；
+1. 构建 DOCX → 跑 `docx_cite_xref.py`（引用）；
 2. Word 里 `Fields.Update()` 两次 → 更新 TOC → 设 10.5 pt/单倍行距/黑色/无下划线 → `Unlink()` → 删 `_Toc*`；
-3. 保存、导出 PDF；
-4. 验收：`_Toc*` = 0，`_Ref*` = 参考文献条数，`REF` 域数 = 引用处数字个数，`SEQ` 域数 = 文献条数。
+3. 保存后**再**跑 `docx_three_line_table.py`（表格）——Word 更新域会按默认表样式重刷边框，三线表必须放在这一步之后（见 `journal-docx-format.md` 第 5 节）；
+4. 从这份成品只读打开导出 PDF（不再保存）；
+5. 验收：`_Toc*` = 0，`_Ref*` = 参考文献条数，`REF` 域数 = 引用处数字个数，`SEQ` 域数 = 文献条数。
 
 ## 6. 验收
 
