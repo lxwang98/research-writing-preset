@@ -64,6 +64,27 @@ python scripts/docx/generate_thesis_docx.py thesis.md output/thesis.docx --image
 
 生成器不提供学校模板匹配参数。样文版式贴近只是高置信样式值合并，不是模板复刻。学校模板应走 `--from-template` 副本填充路径。
 
+## 引用与参考文献的交叉引用
+
+生成器输出的是纯文本标号 `[12]`。送审版、盲审版以及多数学校的提交要求里，正文标号要能跳到文献表，所以生成后补一步：
+
+```powershell
+python <预设>/research-writing-overview/scripts/docx_cite_xref.py output/thesis.docx
+python <预设>/research-writing-overview/scripts/docx_cite_xref.py output/thesis_xref.docx --check
+```
+
+第二条命令应报"未链接 0 / 断链 0"。文献表标题不是"参考文献"时加 `--ref-heading`。脚本只加隐藏书签 `_Ref<n>` 与内部超链接，不改字号、行距、缩进；M1/M3 生成后都能跑。
+
+配合 Word 的收尾顺序：更新目录 → 转静态 → **只删 `_Toc*` 书签**，`_Ref*` 必须保留，否则链接会变成"错误！未定义书签"。做法、验收命令与已知边界见 `research-writing-overview/references/citation-crossref-docx.md`。
+
+纪年与数字同样在交稿前扫一遍：
+
+```powershell
+python <预设>/research-writing-overview/scripts/numeral_lint.py output/thesis.docx
+```
+
+`〇`、`○`、`◯`、全角数字的计数都应为 0；纪年写作"一九二零"或"1920"，全篇不要混用。
+
 ## Asset Rules
 
 - 截图、图表和公式图片通过 image map 插入。

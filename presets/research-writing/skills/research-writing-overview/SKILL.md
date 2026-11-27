@@ -89,8 +89,10 @@ description: 科研写作模式总览与路由。把「选题 → 文献检索 �
 - 正文 12 pt、1.5 倍行距、首行缩进 24 pt；标题 18 pt，英文标题 14 pt，H1 14 pt、H2 12 pt。
 - 表格与参考文献 10.5 pt；表格 `Table Grid`，外层加 1×1 无边框表并设行 `cantSplit` 保持整表，表头 `tblHeader`、行不跨页；参考文献悬挂缩进 24 pt。
 - 关闭 `w:autoSpaceDE` / `w:autoSpaceDN`，禁止 `U+3000`；只保留“表 1 ”和数字与单位之间的半角空格。
+- 纪年与数字里的零写「零」，不写 `〇`：`一九二〇年` / `一九二O年` 在楷体下都是裸圆环，读者读成英文字母、检索也匹配不到；写 `一九二零年` 或整篇改阿拉伯数字，两者不要混用。用 `scripts/numeral_lint.py` 查，别靠肉眼。
 - 标题、表题、图题、表格单元格一律不设置 `keepNext`/`keepLines`/`pageBreakBefore`（会显示黑色方块）；孤行标题用显式分页符。
-- 目录先更新，再 `Unlink()` 转静态，最后删 `_Toc*` 书签；否则会出现黑色方块或“错误！未定义书签”。
+- 目录先更新，再 `Unlink()` 转静态，最后删 `_Toc*` 书签；否则会出现黑色方块或“错误！未定义书签”。只删 `_Toc*`，`_Ref*` 要留给交叉引用。
+- 正文 `[n]` 必须是交叉引用：参考文献条目加隐藏书签 `_Ref<n>`，`[n]` 包成 `w:hyperlink w:anchor`。构建后跑 `scripts/docx_cite_xref.py`，`--check` 应报“未链接 0 / 断链 0”。做法、验收与边界见 [`references/citation-crossref-docx.md`](references/citation-crossref-docx.md)。
 
 完整规格、构建流程、验收清单与故障表都在上述 reference 里；排完版先过一遍验收清单再交付。英文版用 Times New Roman 12 pt、首行缩进 0.5 英寸，TOC 同样按“更新 → 转静态 → 删书签”处理；详见 reference 第 10 节。
 
@@ -102,3 +104,5 @@ description: 科研写作模式总览与路由。把「选题 → 文献检索 �
 - [ ] 章节字数/格式符合学校或期刊要求
 - [ ] 术语全文一致（同一概念只用一种译法）
 - [ ] 摘要/结论里的每条主张都有正文证据支撑
+- [ ] `numeral_lint.py` 无 error：没有 `〇`/`○`/全角数字，纪年体例未混用
+- [ ] `docx_cite_xref.py --check` 报“未链接 0 / 断链 0”，PDF 里点 `[n]` 能跳到对应文献条目

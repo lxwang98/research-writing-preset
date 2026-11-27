@@ -54,6 +54,10 @@ for tag in ("w:autoSpaceDE", "w:autoSpaceDN"):
 2. **正文中文字符之间不插空格。** “35 岁”“HPV 疫苗”“2100 万”这类写法要么删除空格，要么交给 Word 自动间距；既然自动间距已关闭，就统一不留空格。
 3. **只保留两类半角空格**：表题/图题的“表 1 ”“图 1 ”；数字与单位之间（`75 g OGTT`、`200 mg`、`5.1 mmol/L`）。单位后的中文不再加空格。
 4. 中文标点用全角，英文术语内部用半角；不要把英文句号塞进中文句子。
+5. **纪年与数字里的零一律写「零」，不写 `〇`。** `一九二〇年`/`一九二O年` 都不行：U+3007「〇」在楷体下就是一个裸圆环，和拉丁大写 O、圆圈符号 ○（U+25CB）、◯（U+25EF）、全角 Ｏ 在版面上无法区分，读者会读成英文字母，检索也匹配不到。写 `一九二零年`，或整篇改阿拉伯数字 `1920 年`。同一篇里汉字纪年与阿拉伯纪年不要混用（`1920 年代` 与 `二十世纪二十年代` 二选一）。
+6. 全角数字 `０-９` 一律改半角。
+
+第 5 条不要靠肉眼把关，跑 `scripts/numeral_lint.py`（见第 11 节）。
 
 ## 4. 文档结构
 
@@ -107,9 +111,11 @@ Word/WPS 在“显示编辑标记”打开时，会给以下段落画一个**左
 - 图题在图下，居中；数据来源另起一行。
 - 插入宽度默认 15 cm；高宽比大于 1.25 时改为 12.5 cm，避免独占一页。
 
-## 6. 目录：静态、无书签、无黑块
+## 6. 目录：静态、无 `_Toc` 书签、无黑块
 
 这是最容易返工的一步。Word 的 TOC 域依赖 `_Toc` 书签；书签在“显示书签/编辑标记”打开时会显示成黑色方块。直接删除书签又会让目录变成“错误！未定义书签。”。
+
+要删的是 `_Toc*`，不是所有书签：正文引用与参考文献之间的交叉引用依赖 `_Ref<n>` 隐藏书签（第 7 节、`citation-crossref-docx.md`），这类书签必须保留。验收时看的是“`_Toc*` 计数为 0”，不是“书签总数为 0”。
 
 正确顺序：
 
@@ -118,7 +124,7 @@ Word/WPS 在“显示编辑标记”打开时，会给以下段落画一个**左
 3. 把 `TOC 1` / `TOC 2` 段落设为 10.5 pt、单倍行距、段前段后 0、黑色、无下划线。
 4. **先转静态，再删书签**：`TablesOfContents.Item(1).Range.Fields.Item(1).Unlink()`。
 5. `Bookmarks.ShowHidden = true`，删除所有 `_Toc*` 书签。
-6. 保存，导出 PDF；检查目录页码仍在、没有“错误！未定义书签”、DOCX 中 `bookmarkStart` 计数为 0。
+6. 保存，导出 PDF；检查目录页码仍在、没有“错误！未定义书签”、DOCX 中 `_Toc*` 书签计数为 0（`_Ref*` 交叉引用书签保留，见第 7 节）。
 
 代价：目录不再自动更新。正文改动后必须重新生成目录，再重复上述步骤。这是为“无黑块”付出的确定性代价；不要既想自动更新又想没有书签。
 
@@ -139,9 +145,10 @@ project/
 步骤：
 
 1. `python tools/build_docx.py "01-主题.md" refs.json "01-主题.docx"`
-2. Word COM 打开 DOCX，更新 TOC，按第 6 节转静态、删书签，`ExportAsFixedFormat(pdf, 17)`。
-3. `python tools/merge_pdfs.py` 合并各分册，写入一级书签。
-4. 用 PyMuPDF 渲染 2–3 页抽查：摘要页、表格页、参考文献页。
+2. `python <预设>/research-writing-overview/scripts/docx_cite_xref.py "01-主题.docx"` —— 给参考文献条目加 `_Ref<n>` 书签，把正文 `[n]` 变成指向该书签的内部超链接（说明见 `citation-crossref-docx.md`）。
+3. Word COM 打开 DOCX，更新 TOC，按第 6 节转静态、只删 `_Toc*`，`ExportAsFixedFormat(pdf, 17)`。
+4. `python tools/merge_pdfs.py` 合并各分册，写入一级书签。
+5. 用 PyMuPDF 渲染 2–3 页抽查：摘要页、表格页、参考文献页；再点名抽查几条 `[n]`，看链接是否跳到对应文献条目。
 
 `build_docx.py` 至少要实现：
 
@@ -150,6 +157,7 @@ project/
 - `autoSpaceDE`/`autoSpaceDN` 置 0；
 - 标题/正文/表格/参考文献样式；
 - `[[key]]` 编号与 GB/T 7714 参考文献表；
+- 正文引用与参考文献条目的交叉引用，二选一：构建时直接写（`_Ref<n>` 书签 + `w:hyperlink w:anchor`），或构建后跑 `scripts/docx_cite_xref.py` 补上；
 - 表格 1×1 无边框外层表 + 内层 `Table Grid`，`cantSplit`、`tblHeader`、列宽按内容分配；
 - 标题/表题/图题/单元格不写 `keepNext`/`keepLines`/`pageBreakBefore`；孤行标题用 `<!-- pagebreak -->` 手动分页；
 - 图片按高宽比限宽。
@@ -162,9 +170,11 @@ project/
 - [ ] 表格 10.5 pt，整表不跨页（1×1 外层表 + `cantSplit`），表题在上、来源在下
 - [ ] 参考文献 10.5 pt、悬挂缩进 24 pt、左对齐
 - [ ] 源码与 DOCX 中 `U+3000` 计数为 0
+- [ ] 源码与 DOCX 中 `U+3007`（〇）、`○`、`◯`、全角数字计数为 0；纪年写作「一九二零」或「1920」，全篇纪年体例统一
 - [ ] 正文没有“35 岁”“HPV 疫苗”这类多余空格；数字+单位保留一个半角空格
 - [ ] 目录页码正确，无“错误！未定义书签”，无蓝色下划线
-- [ ] DOCX 中 `bookmarkStart` 计数为 0
+- [ ] DOCX 中 `_Toc*` 书签计数为 0（`_Ref*` 交叉引用书签要保留，数量 = 参考文献条数）
+- [ ] 正文 `[n]`/`[n,m]`/`[n-m]` 都能点，指向对应文献条目；`w:hyperlink` 计数 ≥ 引用标记处数，断链为 0
 - [ ] DOCX 中 `w:keepNext`、`w:keepLines`、`w:pageBreakBefore` 计数均为 0
 - [ ] PDF 渲染抽查无空心方框、无黑色方块、无表格跨页断裂
 
@@ -181,6 +191,9 @@ project/
 | 表格被切成两页、只剩一行 | 移除 keepNext 后表格可在行间分页 | 用 1×1 外层表包住整表；若仍放不下，在表前补正文或手动分页 |
 | 表格前大片空白 | 整表被推到下一页 | 可接受；在表前补足正文，或把表移到更合适的位置；不要用 keepNext 硬锁 |
 | 参考文献 URL 字距被拉大 | 段落两端对齐 | 参考文献改左对齐 |
+| “一九二O年”“一九二〇年” | 纪年里的零用了 `U+3007` 〇（或拉丁 O、○ U+25CB） | 源码改「零」；整篇也可改阿拉伯数字，但不要一半汉字一半阿拉伯；跑 `scripts/numeral_lint.py` |
+| 正文 `[12]` 点了不跳转 | 引用是纯文本，没有书签与内部超链接 | 跑 `scripts/docx_cite_xref.py`；顺序是先加书签、再加链接 |
+| 点引用提示“错误！未定义书签” | `_Ref*` 书签被删（例如按旧清单把 `bookmarkStart` 全部清掉） | 只删 `_Toc*`，保留 `_Ref*`；断了就重跑脚本 |
 
 ## 10. 英文版（English edition）
 
@@ -211,3 +224,30 @@ project/
 - 表格中的 `Table 1` 与正文引用 `Table 1` 大小写一致。
 
 英文版的验收清单与第 8 节相同，另加一条：**通读英文标点与空格，确认没有中文全角空格、没有中英文混排造成的方形空洞。**
+
+## 11. 配套脚本（本技能 `scripts/` 目录）
+
+排版规范里“能查、能改”的部分不靠肉眼，也不靠模型自觉，落成两个脚本，构建前后各跑一次。
+
+### `numeral_lint.py` —— 纪年与数字扫描
+
+```bash
+python scripts/numeral_lint.py 01-主题.md          # 查源文件
+python scripts/numeral_lint.py 01-主题.docx        # 查成品（Word 里手改过的也能查出来）
+python scripts/numeral_lint.py 项目目录 -r          # 递归查整个项目
+python scripts/numeral_lint.py 01-主题.md --fix     # 把 〇/○ 换成「零」，另存 *_fixed，不动原件
+```
+
+检查项：`E3007`（U+3007 〇）、`ECIRCLE`（○ U+25CB / ◯ U+25EF）、`ELATIN_O`（汉字数字旁的拉丁 O/o）、`EDIGIT_O`（`192O` 这类）、`EFULL_O`（全角 Ｏ）、`W_FULLDIG`（全角数字）、`W_ERA`（汉字纪年与阿拉伯纪年混用的警告，不计入退出码）。有 error 时退出码为 1，可直接接进构建脚本。
+
+### `docx_cite_xref.py` —— 引用与参考文献交叉引用
+
+```bash
+python scripts/docx_cite_xref.py 01-主题.docx                  # 输出 01-主题_xref.docx
+python scripts/docx_cite_xref.py 01-主题.docx --style hyperlink # 蓝色下划线（默认 plain：与正文同色、无下划线）
+python scripts/docx_cite_xref.py 01-主题_xref.docx --check      # 复查：已链接/未链接/断链
+```
+
+做法：参考文献第 *n* 条的段落加隐藏书签 `_Ref<n>`；正文 `[n]`、`[n,m]`、`[n-m]` 里的每个数字包进 `<w:hyperlink w:anchor="_Ref<n>">`，方括号、逗号、连字符保持纯文本，所以版面上仍是 `[12]`。只处理编号落在 1..文献条数 范围内的方括号，`[2020]` 这类不会误伤；已含超链接、域或图片的段落会跳过并计数。
+
+局限与范围详见 `citation-crossref-docx.md`。

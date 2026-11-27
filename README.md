@@ -146,6 +146,9 @@ research-writing-preset/
 ├─ LICENSE                        # MIT（只覆盖作者原创部分）
 └─ presets/research-writing/
    ├─ skills/<kebab-name>/SKILL.md    # 一层目录一个技能
+   ├─ skills/research-writing-overview/scripts/
+   │  ├─ numeral_lint.py              # 纪年/数字体检：〇、○、全角数字、纪年混用
+   │  └─ docx_cite_xref.py            # 正文 [n] 与参考文献建立交叉引用
    ├─ SOURCES.md                      # 每个技能的上游仓库、许可证与用途
    └─ LICENSES/<owner>__<repo>.txt    # 上游许可原文
 ```
@@ -153,6 +156,20 @@ research-writing-preset/
 技能目录**只扫描一层**：`<root>/<name>/SKILL.md` 或 `<root>/<name>.md`。新增技能直接建目录、
 写 `SKILL.md`（frontmatter 必须有 kebab-case `name` 与 `description`），重启 DSH 即生效，
 不需要改 patch。
+
+## 排版体检脚本
+
+排版规范里有两类错误光靠人设约束拦不住，所以做成了脚本（`presets/research-writing/skills/research-writing-overview/scripts/`）：
+
+- **纪年写成 `一九二O年`**。根因不是模型把「零」打错，而是它选了 U+3007「〇」——楷体下就是一个裸圆环，和拉丁大写 O 无法区分。`numeral_lint.py` 扫 `〇`(U+3007)、`○`(U+25CB)、`◯`(U+25EF)、汉字数字旁的拉丁 O、全角数字，并提示汉字纪年与阿拉伯纪年混用；`--fix` 把 `〇`/`○` 换成「零」，另存 `*_fixed`，不动原件。
+- **正文 `[n]` 与文末文献表没有交叉引用**。旧规范第 8 节还要求「`bookmarkStart` 计数为 0」，等于禁止了交叉引用所需的书签。`docx_cite_xref.py` 给文献条目加隐藏书签 `_Ref<n>`、把正文 `[n]`/`[3-5]`/`[6,9]` 包成内部超链接（版面仍是黑色 `[12]`），`--check` 报告已链接/未链接/断链数。
+
+```powershell
+python scripts/numeral_lint.py 稿件.docx
+python scripts/docx_cite_xref.py 稿件.docx --check
+```
+
+验收口径随之改了：删的是 `_Toc*` 书签，`_Ref*` 必须保留。详见 `presets/research-writing/skills/research-writing-overview/references/citation-crossref-docx.md`。
 
 ## 组合要点（给想改 preset 的人）
 
