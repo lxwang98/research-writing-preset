@@ -88,7 +88,7 @@ description: 科研写作模式总览与路由。把「选题 → 文献检索 �
 - A4，左右边距 2.6 cm、上下 2.5 cm；中文楷体、英文 Times New Roman。
 - 正文 12 pt、1.5 倍行距、首行缩进 24 pt；标题 18 pt，英文标题 14 pt，H1 14 pt、H2 12 pt。
 - 表格与参考文献 10.5 pt；参考文献悬挂缩进 24 pt。
-- 表格一律**三线表**：顶线与底线同粗（默认 1.5 pt），栏目线（表头下）更细（默认 0.75 pt），其余边框全部去掉；1×1 无边框外层表只负责整表不跨页，不加三线。`Table Grid` 样式会让表格变成满格网格，必须删样式并写 `tblBorders`；构建后跑 `scripts/docx_three_line_table.py`，`--check` 退出码 0 才算过。
+- 表格一律**三线表**：顶线与底线同粗（默认 1.5 pt），栏目线（表头下）更细（默认 0.75 pt），其余边框全部去掉；1×1 无边框外层表只负责整表不跨页，不加三线。`Table Grid` 样式会让表格变成满格网格；而且 Word 更新域或保存时会按默认表样式重刷边框——`none` 边写了 `w:sz="0"`（非法值）、行级 `tblPrEx`、残留 `w:tblLook` 都会让表退回网格。**所以三线表这一步放在 Word 更新域/删 `_Toc*`/保存之后**，跑 `scripts/docx_three_line_table.py`，再从成品只读导出 PDF；`--check` 退出码 0（含 `tblPrEx 0 行`）才算过。
 - 关闭 `w:autoSpaceDE` / `w:autoSpaceDN`，禁止 `U+3000`；只保留“表 1 ”和数字与单位之间的半角空格。
 - 纪年与数字里的零写「零」，不写 `〇`：`一九二〇年` / `一九二O年` 在楷体下都是裸圆环，读者读成英文字母、检索也匹配不到；写 `一九二零年` 或整篇改阿拉伯数字，两者不要混用。用 `scripts/numeral_lint.py` 查，别靠肉眼。
 - 标题、表题、图题、表格单元格一律不设置 `keepNext`/`keepLines`/`pageBreakBefore`（会显示黑色方块）；孤行标题用显式分页符。
@@ -106,6 +106,7 @@ description: 科研写作模式总览与路由。把「选题 → 文献检索 �
 - [ ] 术语全文一致（同一概念只用一种译法）
 - [ ] 摘要/结论里的每条主张都有正文证据支撑
 - [ ] `numeral_lint.py` 无 error：没有 `〇`/`○`/全角数字，纪年体例未混用
-- [ ] `docx_three_line_table.py --check` 退出码 0：无 `tblStyle`，顶/底 1.5 pt、栏目线 0.75 pt，其余边框为 `none`
+- [ ] `docx_three_line_table.py --check` 退出码 0：无 `tblStyle`/`tblLook`/`tblPrEx`，顶/底 1.5 pt、栏目线 0.75 pt，其余边框为 `none`
+- [ ] 三线表这一步在 Word 更新域、删 `_Toc*`、保存之后；交付 PDF 由这份成品只读导出
 - [ ] `docx_cite_xref.py --check` 报“未链接 0 / 断链 0”，REF 域数 = 引用处数字个数、SEQ 域数 = 文献条数；PDF 里点 `[n]` 能跳到对应文献条目
 - [ ] 在 Word 里插入一条文献、全选 F9 后，后续编号与正文引用一起后移（自动重编号成立）

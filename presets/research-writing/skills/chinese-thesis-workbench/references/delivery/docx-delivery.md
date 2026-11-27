@@ -73,7 +73,9 @@ python <预设>/research-writing-overview/scripts/docx_three_line_table.py outpu
 python <预设>/research-writing-overview/scripts/docx_three_line_table.py output/thesis_3line.docx --check
 ```
 
-默认顶线/底线 1.5 pt、栏目线 0.75 pt；学校模板规定 2.25 pt / 1.5 pt 的，用 `--thick 2.25 --thin 1.5` 覆盖。两行表头用 `--header-rows 2`，栏目线会画在第二行下面。`--check` 应退出码 0（无 `tblStyle`、insideH/insideV 为 `none`）。1×1 无边框外层排版表脚本会自动跳过，不会把外层框线也变成粗线。
+默认顶线/底线 1.5 pt、栏目线 0.75 pt；学校模板规定 2.25 pt / 1.5 pt 的，用 `--thick 2.25 --thin 1.5` 覆盖。两行表头用 `--header-rows 2`，栏目线会画在第二行下面。`--check` 应退出码 0（无 `tblStyle`/`tblLook`/`tblPrEx`、insideH/insideV 为 `none`）。1×1 无边框外层排版表脚本会自动跳过，不会把外层框线也变成粗线。
+
+**跑在三线表之前的坑**：Word 更新域（`Fields.Update()` / `Ctrl+A`+`F9`）或保存时，会按默认表样式把边框重刷成 0.5 pt 全网格。所以顺序是"更新域 → 更新目录 → 转静态 → 只删 `_Toc*` → 保存 → **再跑三线表脚本** → 只读打开导出 PDF"。反过来做，交付件里的表一定是网格。脚本这边已把三个触发点掐掉（`none` 边不写 `w:sz="0"`、逐行删 `tblPrEx`、删 `tblLook`），所以先跑过一次脚本的成品，作者日后在 Word 里按 F9 加文献也不会退回网格。
 
 ## 引用与参考文献的交叉引用
 

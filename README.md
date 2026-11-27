@@ -163,7 +163,8 @@ research-writing-preset/
 排版规范里有三类错误光靠人设约束拦不住，所以做成了脚本（`presets/research-writing/skills/research-writing-overview/scripts/`）：
 
 - **纪年写成 `一九二O年`**。根因不是模型把「零」打错，而是它选了 U+3007「〇」——楷体下就是一个裸圆环，和拉丁大写 O 无法区分。`numeral_lint.py` 扫 `〇`(U+3007)、`○`(U+25CB)、`◯`(U+25EF)、汉字数字旁的拉丁 O、全角数字，并提示汉字纪年与阿拉伯纪年混用；`--fix` 把 `〇`/`○` 换成「零」，另存 `*_fixed`，不动原件。
-- **表格不是三线表**。默认样式（`Table Grid`）会给表格加上满格网格和竖线，期刊与学位论文都要三线表：顶线与底线同粗、栏目线更细、其余边框去掉。`docx_three_line_table.py` 删样式、写 `tblBorders`（默认 1.5 pt / 0.75 pt，`--thick`/`--thin` 可改），1×1 排版外层表自动跳过；`--check` 不合规退出码 1。
+- **表格不是三线表**。默认样式（`Table Grid`）会给表格加上满格网格和竖线，期刊与学位论文都要三线表：顶线与底线同粗、栏目线更细、其余边框去掉。`docx_three_line_table.py` 删 `tblStyle`/`tblLook`、逐行删 `tblPrEx`、逐单元格写 `tcBorders`（默认 1.5 pt / 0.75 pt，`--thick`/`--thin` 可改），1×1 排版外层表自动跳过；`--check` 不合规退出码 1。
+  这里踩过的坑值得记一笔：Word 会在**更新域或保存时**按默认表样式重刷边框，把三线表变回 0.5 pt 全网格。触发点有三个——`none` 边写了非法的 `w:sz="0"`（整个边框容器被丢弃）、行级 `tblPrEx/tblBorders` 覆盖表级设置、残留 `w:tblLook` 触发条件格式重算。脚本三条都已处理，另外**顺序**也要对：先更新域/目录、删 `_Toc*`、保存，**最后**跑三线表脚本，再从这份成品只读导出 PDF。
 - **正文 `[n]` 与文末文献表没有交叉引用**。旧规范第 8 节还要求「`bookmarkStart` 计数为 0」，等于禁止了交叉引用所需的书签。`docx_cite_xref.py` 默认 `--style reffield`：文献条目编号用 `SEQ _refnum` 域 + 隐藏书签 `_Ref<n>`，正文 `[n]`/`[3-5]`/`[6,9]` 用 `REF _Ref<n> \h` 域（版面仍是黑色 `[12]`）。**在 Word 里加一条文献、全选 F9，后面编号和正文引用一起后移**；`--style hyperlink` 是静态备用方案。
 
 ```powershell
@@ -222,6 +223,11 @@ python scripts/docx_cite_xref.py 稿件.docx --check
 **Q：三线表的线宽是固定的吗？**
 默认顶线/底线 1.5 pt、栏目线 0.75 pt（常州大学等模板的通行值；GB/T 7713.1—2006 只建议三线表，不规定磅值）。
 学校模板另有规定就用 `--thick 2.25 --thin 1.5` 覆盖。
+
+**Q：三线表在 Word 里看着对，保存后又变回网格，是怎么回事？**
+Word 更新域（`F9`）或保存时会按默认表样式重刷表格边框。`docx_three_line_table.py` 已把三个触发点掐掉
+（`none` 边不写 `w:sz="0"`、逐行删 `tblPrEx`、删 `tblLook`），但**顺序**还得对：先更新域/目录、删 `_Toc*`、
+保存，最后跑脚本，再从这份成品只读导出 PDF。已经按这个顺序跑过的成品，之后在 Word 里按 F9 加文献不会再退回网格。
 
 **Q：技能目录会不会太占上下文？**
 不会全量加载：人设要求先读 `research-writing-overview` 路由表，再按阶段只加载需要的 2–3 个技能，

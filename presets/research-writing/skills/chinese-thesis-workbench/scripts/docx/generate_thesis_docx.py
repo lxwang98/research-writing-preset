@@ -327,6 +327,8 @@ def apply_three_line_borders(table, thick_pt: float = 1.5, thin_pt: float = 0.75
     """把表格改成三线表：顶线=底线=thick_pt，表头下栏目线=thin_pt，其余边框去掉。
 
     `Table Grid` 样式会让表格渲染成满格网格；这里不设样式，直接写 tblBorders。
+    逐单元格再写一遍 tcBorders，是因为 Word 保存时会补行级 `w:tblPrEx`
+    覆盖表级边框；只有单元格级边框能顶住（详见 docx_three_line_table.py）。
     """
     tbl_pr = table._tbl.tblPr
     for old in tbl_pr.findall(qn("w:tblStyle")):
@@ -342,21 +344,32 @@ def apply_three_line_borders(table, thick_pt: float = 1.5, thin_pt: float = 0.75
     borders.append(_border_el("w:insideV", "none"))
     insert_ordered(tbl_pr, borders, TBLPR_ORDER)
 
-    for row in table.rows:
+    rows = table.rows
+    last = len(rows) - 1
+    for i, row in enumerate(rows):
         tr_pr = row._tr.get_or_add_trPr()
+        for old in tr_pr.findall(qn("w:tblPrEx")):
+            tr_pr.remove(old)
         if tr_pr.find(qn("w:cantSplit")) is None:
             insert_ordered(tr_pr, OxmlElement("w:cantSplit"), TRPR_ORDER)
-    header = table.rows[0]
-    header_tr_pr = header._tr.get_or_add_trPr()
-    if header_tr_pr.find(qn("w:tblHeader")) is None:
-        insert_ordered(header_tr_pr, OxmlElement("w:tblHeader"), TRPR_ORDER)
-    for cell in header.cells:
-        tc_pr = cell._tc.get_or_add_tcPr()
-        for old in tc_pr.findall(qn("w:tcBorders")):
-            tc_pr.remove(old)
-        tc_borders = OxmlElement("w:tcBorders")
-        tc_borders.append(_border_el("w:bottom", "single", thin_pt))
-        insert_ordered(tc_pr, tc_borders, TCPR_ORDER)
+        if i == 0 and tr_pr.find(qn("w:tblHeader")) is None:
+            insert_ordered(tr_pr, OxmlElement("w:tblHeader"), TRPR_ORDER)
+        spec = {"w:top": ("none", None), "w:left": ("none", None),
+                "w:bottom": ("none", None), "w:right": ("none", None)}
+        if i == 0:
+            spec["w:top"] = ("single", thick_pt)
+            spec["w:bottom"] = ("single", thin_pt)
+        if i == last:
+            spec["w:bottom"] = ("single", thick_pt)
+        for cell in row.cells:
+            tc_pr = cell._tc.get_or_add_tcPr()
+            for old in tc_pr.findall(qn("w:tcBorders")):
+                tc_pr.remove(old)
+            tc_borders = OxmlElement("w:tcBorders")
+            for edge in ("w:top", "w:left", "w:bottom", "w:right"):
+                val, pt = spec[edge]
+                tc_borders.append(_border_el(edge, val, pt))
+            insert_ordered(tc_pr, tc_borders, TCPR_ORDER)
 
 
 def add_markdown_table(doc: Document, lines: list[str], styles: dict[str, Any]) -> None:

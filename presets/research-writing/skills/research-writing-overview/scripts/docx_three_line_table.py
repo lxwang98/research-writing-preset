@@ -92,7 +92,8 @@ def border_el(tag: str, val: str, sz_pt: float | None = None) -> OxmlElement:
     el = OxmlElement(tag)
     el.set(qn("w:val"), val)
     if val == "none":
-        el.set(qn("w:sz"), "0")
+        # 注意：`w:sz="0"` 不合法（schema 下限是 2），Word 遇到会把整个
+        # 边框容器当成坏数据丢掉，边框退回默认网格。none 只写 val。
         el.set(qn("w:space"), "0")
         el.set(qn("w:color"), "auto")
     else:
@@ -116,6 +117,37 @@ def is_layout_wrapper(tbl) -> bool:
     return rows <= 1 and cols <= 1
 
 
+def _row_border_spec(i: int, last: int, header_rows: int, thick: float, thin: float) -> dict:
+    """第 i 行每个单元格要写的四边框：top / left / bottom / right。
+
+    三线表只有三条横线：首行上（粗）、表头末行下（细）、末行下（粗）。
+    逐单元格写而不是只靠表级边框，是因为 Word 保存时会用行级
+    `w:tblPrEx` 覆盖表级 `w:tblBorders`，只有单元格级边框能顶住。
+    """
+    spec = {"w:top": ("none", None), "w:left": ("none", None),
+            "w:bottom": ("none", None), "w:right": ("none", None)}
+    if i == 0:
+        spec["w:top"] = ("single", thick)
+        spec["w:bottom"] = ("single", thin) if header_rows <= 1 else ("none", None)
+    if header_rows > 1 and i == header_rows - 1:
+        spec["w:bottom"] = ("single", thin)
+    if i == last:
+        spec["w:bottom"] = ("single", thick)
+    return spec
+
+
+def _write_cell_borders(tc, spec: dict) -> None:
+    tcPr = tc.find(qn("w:tcPr"))
+    if tcPr is None:
+        tcPr = OxmlElement("w:tcPr")
+        tc.insert(0, tcPr)
+    borders = OxmlElement("w:tcBorders")
+    for edge in ("w:top", "w:left", "w:bottom", "w:right"):
+        val, pt = spec[edge]
+        borders.append(border_el(edge, val, pt))
+    replace_child(tcPr, borders, TCPR_ORDER)
+
+
 def apply_three_line(tbl, thick: float, thin: float, header_rows: int) -> None:
     tblPr = tbl.find(qn("w:tblPr"))
     if tblPr is None:
@@ -125,6 +157,10 @@ def apply_three_line(tbl, thick: float, thin: float, header_rows: int) -> None:
     # 去掉网格表样式，避免样式里的竖线/行间线盖过显式边框
     for old in tblPr.findall(qn("w:tblStyle")):
         tblPr.remove(old)
+    # 同时去掉 tblLook：留着 firstRow/banded 这些条件格式标记，Word 保存时
+    # 会按“带边框网格表”重算，把 insideH/insideV 又补回来。
+    for old in tblPr.findall(qn("w:tblLook")):
+        tblPr.remove(old)
 
     borders = OxmlElement("w:tblBorders")
     for edge, val in (("w:top", "single"), ("w:left", "none"), ("w:bottom", "single"),
@@ -133,37 +169,58 @@ def apply_three_line(tbl, thick: float, thin: float, header_rows: int) -> None:
     replace_child(tblPr, borders, TBLPR_ORDER)
 
     rows = tbl.findall(qn("w:tr"))
+    last = len(rows) - 1
     for i, tr in enumerate(rows):
         trPr = tr.find(qn("w:trPr"))
         if trPr is None:
             trPr = OxmlElement("w:trPr")
             tr.insert(0, trPr)
+        # Word 保存后会写行级 tblPrEx（整片 0.5 pt 网格），必须删掉，
+        # 否则它盖住表级与单元格级边框，三线表退回满格网格。
+        for old in trPr.findall(qn("w:tblPrEx")):
+            trPr.remove(old)
         if trPr.find(qn("w:cantSplit")) is None:
             insert_ordered(trPr, OxmlElement("w:cantSplit"), TRPR_ORDER)
         if i < header_rows and trPr.find(qn("w:tblHeader")) is None:
             insert_ordered(trPr, OxmlElement("w:tblHeader"), TRPR_ORDER)
-
-    header_line_rows = range(min(header_rows, len(rows)))
-    for i in header_line_rows:
-        for tc in rows[i].findall(qn("w:tc")):
-            tcPr = tc.find(qn("w:tcPr"))
-            if tcPr is None:
-                tcPr = OxmlElement("w:tcPr")
-                tc.insert(0, tcPr)
-            tcBorders = tcPr.find(qn("w:tcBorders"))
-            if tcBorders is None:
-                tcBorders = OxmlElement("w:tcBorders")
-                replace_child(tcPr, tcBorders, TCPR_ORDER)
-                tcBorders = tcPr.find(qn("w:tcBorders"))
-            for old in tcBorders.findall(qn("w:bottom")):
-                tcBorders.remove(old)
-            # 只写 bottom：其余三边继续沿用表格级边框
-            tcBorders.append(border_el("w:bottom", "single", thin))
+        spec = _row_border_spec(i, last, header_rows, thick, thin)
+        for tc in tr.findall(qn("w:tc")):
+            _write_cell_borders(tc, spec)
 
 
-def inspect_table(tbl, index: int) -> dict:
+def _edge_pt(borders, edge: str):
+    """读一个 w:xxxBorders 容器里的某条边，返回 (val, pt)。"""
+    if borders is None:
+        return None, None
+    el = borders.find(qn(edge))
+    if el is None:
+        return None, None
+    val = el.get(qn("w:val"))
+    if val in (None, "none"):
+        return val or "none", 0.0
+    return val, int(el.get(qn("w:sz")) or 0) / 8
+
+
+def _cell_edges(tc) -> dict:
+    tcPr = tc.find(qn("w:tcPr"))
+    borders = tcPr.find(qn("w:tcBorders")) if tcPr is not None else None
+    return {edge: _edge_pt(borders, edge) for edge in ("w:top", "w:left", "w:bottom", "w:right")}
+
+
+def _effective_edge(rows, row_idx: int, edge: str, table_borders):
+    """单元格级优先，没有则回退表级（Word 的覆盖顺序）。"""
+    if 0 <= row_idx < len(rows):
+        vals = [_cell_edges(tc)[edge] for tc in rows[row_idx].findall(qn("w:tc"))]
+        vals = [(val, pt) for val, pt in vals if val is not None]
+        if vals:
+            return max(vals, key=lambda v: v[1] or 0.0)
+    return _edge_pt(table_borders, edge)
+
+
+def inspect_table(tbl, index: int, header_rows: int = 1) -> dict:
     rows, cols = table_shape(tbl)
     tblPr = tbl.find(qn("w:tblPr"))
+    rows_el = tbl.findall(qn("w:tr"))
     info = {
         "index": index,
         "rows": rows,
@@ -175,6 +232,7 @@ def inspect_table(tbl, index: int) -> dict:
         "insideH": None,
         "insideV": None,
         "header_bottom_pt": None,
+        "prEx_rows": 0,
         "cantSplit_all": True,
     }
     if tblPr is None:
@@ -182,32 +240,23 @@ def inspect_table(tbl, index: int) -> dict:
     style = tblPr.find(qn("w:tblStyle"))
     if style is not None:
         info["tblStyle"] = style.get(qn("w:val"))
-    borders = tblPr.find(qn("w:tblBorders"))
-    if borders is not None:
-        for edge, key in (("w:top", "top_pt"), ("w:bottom", "bottom_pt")):
-            el = borders.find(qn(edge))
-            if el is not None and el.get(qn("w:val")) not in (None, "none"):
-                info[key] = int(el.get(qn("w:sz")) or 0) / 8
-            elif el is not None:
-                info[key] = 0.0
-        for edge, key in (("w:insideH", "insideH"), ("w:insideV", "insideV")):
-            el = borders.find(qn(edge))
-            info[key] = el.get(qn("w:val")) if el is not None else None
-    trs = tbl.findall(qn("w:tr"))
-    for tr in trs:
+    table_borders = tblPr.find(qn("w:tblBorders"))
+    info["top_pt"] = _effective_edge(rows_el, 0, "w:top", table_borders)[1]
+    if rows_el:
+        info["bottom_pt"] = _effective_edge(rows_el, len(rows_el) - 1, "w:bottom", table_borders)[1]
+        hdr = min(max(header_rows, 1), len(rows_el)) - 1
+        info["header_bottom_pt"] = _effective_edge(rows_el, hdr, "w:bottom", table_borders)[1]
+    info["insideH"] = _edge_pt(table_borders, "w:insideH")[0] if table_borders is not None else None
+    info["insideV"] = _edge_pt(table_borders, "w:insideV")[0] if table_borders is not None else None
+    for tr in rows_el:
         trPr = tr.find(qn("w:trPr"))
-        if trPr is None or trPr.find(qn("w:cantSplit")) is None:
+        if trPr is None:
             info["cantSplit_all"] = False
-    if trs:
-        bottoms = []
-        for tc in trs[0].findall(qn("w:tc")):
-            tcPr = tc.find(qn("w:tcPr"))
-            tcBorders = tcPr.find(qn("w:tcBorders")) if tcPr is not None else None
-            bottom = tcBorders.find(qn("w:bottom")) if tcBorders is not None else None
-            if bottom is not None and bottom.get(qn("w:val")) not in (None, "none"):
-                bottoms.append(int(bottom.get(qn("w:sz")) or 0) / 8)
-        if bottoms:
-            info["header_bottom_pt"] = max(bottoms)
+            continue
+        if trPr.find(qn("w:cantSplit")) is None:
+            info["cantSplit_all"] = False
+        if trPr.find(qn("w:tblPrEx")) is not None:
+            info["prEx_rows"] += 1
     return info
 
 
@@ -226,7 +275,7 @@ def run(src: Path, dst: Path, thick: float, thin: float, header_rows: int, check
         rows, cols = table_shape(tbl)
         if is_layout_wrapper(tbl):
             report["wrappers_skipped"] += 1
-            report["items"].append(inspect_table(tbl, i))
+            report["items"].append(inspect_table(tbl, i, header_rows))
             continue
         if rows < 2 and cols < 2:
             report["thin_skipped"] += 1
@@ -234,7 +283,7 @@ def run(src: Path, dst: Path, thick: float, thin: float, header_rows: int, check
         if not check_only:
             apply_three_line(tbl, thick, thin, header_rows)
             report["converted"] += 1
-        report["items"].append(inspect_table(tbl, i))
+        report["items"].append(inspect_table(tbl, i, header_rows))
     if not check_only:
         dst.parent.mkdir(parents=True, exist_ok=True)
         doc.save(str(dst))
@@ -269,6 +318,7 @@ def main(argv: list[str] | None = None) -> int:
         or it["insideV"] not in (None, "none")
         or it["insideH"] not in (None, "none")
         or it["tblStyle"]
+        or it["prEx_rows"] > 0
     ]
 
     if args.json:
@@ -283,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"  表{it['index']}  {it['rows']}×{it['cols']}  "
                 f"顶线 {it['top_pt']} pt / 底线 {it['bottom_pt']} pt / "
                 f"栏目线 {it['header_bottom_pt']} pt / "
-                f"insideH {it['insideH']} / insideV {it['insideV']} / "
+                f"insideH {it['insideH']} / insideV {it['insideV']} / tblPrEx {it['prEx_rows']} 行 / "
                 f"style {it['tblStyle']}"
             )
         if bad:

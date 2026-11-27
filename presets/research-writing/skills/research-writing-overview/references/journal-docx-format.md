@@ -80,7 +80,13 @@ for tag in ("w:autoSpaceDE", "w:autoSpaceDN"):
 ### 表格
 
 - **一律用三线表**，不用满格网格。顶线、底线各 1.5 pt（两条粗线粗细相同），表头下的栏目线 0.75 pt（约为粗线一半）；不画竖线，也不画其余横线。GB/T 7713.1—2006 只写“建议采用国际通行的三线表”，不规定磅值；1.5/0.75 是期刊与多数高校学位论文模板的通行值（常州大学、上海交大等模板明文写“标题行上框线 1.5 磅、下框线 0.75 磅”）。学校或期刊模板另有规定时以模板为准，脚本用 `--thick` / `--thin` 改。
-- 实现方式：**删掉 `tblStyle`（尤其 `Table Grid`）**，改由 `tblBorders` 给 top/bottom `single` 粗线、left/right/insideH/insideV `none`；再给表头行 `tcBorders/w:bottom` 一条细线。只删样式不写 `tblBorders`，在部分 Word 版本里会退回默认网格，所以两项要一起做。
+- 实现方式：**删掉 `tblStyle`（尤其 `Table Grid`）与 `tblLook`**，逐单元格写 `tcBorders`（首行 top 粗、首行 bottom 细、末行 bottom 粗、其余 `none`、左右 `none`），并逐行删掉 `tblPrEx`。
+- 三线表在 Word 里“自己做一遍就好了、一保存又变回网格”，原因只有三个，都与磅值无关：
+  1. **`none` 边上写了 `w:sz="0"`**。`w:sz` 的下限是 2，Word 读到 0 会把整个 `tcBorders`/`tblBorders` 当坏数据丢掉，于是按默认样式重刷成 0.5 pt 网格。`none` 只写 `w:val="none"`（加 `space`/`color`）。
+  2. **存在行级 `w:tblPrEx`**。Word 保存时会往 `w:trPr` 里写 `tblPrEx/tblBorders`（0.5 pt 全网格），它的优先级高于表级 `tblBorders`，必须逐行删除。
+  3. **留着 `w:tblLook`**。带 `firstRow`/banded 条件格式标记时，Word 一保存就把 `insideH`/`insideV` 算回来；删掉 `tblLook` 后再保存，`insideH` 保持 `none`（同一文件对照实验已验证）。
+- **顺序要求**：Word 更新域（`Fields.Update()`）会按默认表样式重刷边框，所以三线表必须放在 Word 收尾**之后**——先更新域、更新目录、删 `_Toc*`、保存，最后跑一次 `scripts/docx_three_line_table.py`，再从这份成品导出 PDF（导出时只读打开、不再保存）。反过来做，交付件里的表一定退回网格。
+- 交付件已按上面这条链跑过以后，作者日后在 Word 里加文献、`Ctrl+A` + F9 不会毁掉三线表（已验证）；只有“重新用 `build_docx.py` 生成、还没跑三线表脚本”的文件才会是网格。
 - 不要用文本框拼表；外层 1×1 排版表**不加**三线，脚本会自动跳过 1×1 表。
 - **整表不跨页，不靠 `keepNext`。** 把真正的表格放进一个 1×1 无边框外层表：外层行设 `w:cantSplit`，表题也放在外层单元格内、内层表之前。这样整表（含表题）会一起移到下一页，而不会出现标题左侧的黑方块。
 - 内层表首行设 `w:tblHeader`（万一超长仍可重复表头），每一行设 `w:cantSplit`。
@@ -148,11 +154,12 @@ project/
 步骤：
 
 1. `python tools/build_docx.py "01-主题.md" refs.json "01-主题.docx"`
-2. `python <预设>/research-writing-overview/scripts/docx_three_line_table.py "01-主题.docx"` —— 把 `Table Grid` 网格表改成三线表（顶线=底线 1.5 pt、栏目线 0.75 pt），1×1 排版外层表自动跳过（规范见第 5 节）。
-3. `python <预设>/research-writing-overview/scripts/docx_cite_xref.py "01-主题.docx"` —— 默认 `--style reffield`：文献条目变成 `[` + `SEQ` 域 + `]` 并加 `_Ref` 书签，正文 `[n]` 变成 `REF` 域；插入新文献后更新域即自动重编号（说明见 `citation-crossref-docx.md`）。
-4. Word COM 打开 DOCX，先 `Fields.Update()` 两次（域是缓存值，不更新就是旧编号），再更新 TOC，按第 6 节转静态、只删 `_Toc*`，`ExportAsFixedFormat(pdf, 17)`。
-5. `python tools/merge_pdfs.py` 合并各分册，写入一级书签。
-6. 用 PyMuPDF 渲染 2–3 页抽查：摘要页、表格页、参考文献页；再点名抽查几条 `[n]`，看链接是否跳到对应文献条目。
+2. `python <预设>/research-writing-overview/scripts/docx_cite_xref.py "01-主题.docx"` —— 默认 `--style reffield`：文献条目变成 `[` + `SEQ` 域 + `]` 并加 `_Ref` 书签，正文 `[n]` 变成 `REF` 域；插入新文献后更新域即自动重编号（说明见 `citation-crossref-docx.md`）。
+3. Word COM 打开 DOCX：`Fields.Update()` 两次（域里是缓存值，不更新就是旧编号），再更新 TOC，按第 6 节转静态、只删 `_Toc*`，保存；`ExportAsFixedFormat(pdf, 17)` 先出一版整册 PDF 备查。
+4. **最后**跑 `python <预设>/research-writing-overview/scripts/docx_three_line_table.py "01-主题.docx"` —— 把 `Table Grid` 网格表改成三线表（顶线=底线 1.5 pt、栏目线 0.75 pt），1×1 排版外层表自动跳过（规范与三个根因见第 5 节）。这一步必须在第 3 步之后。
+5. 用第 4 步的成品**只读**打开 Word 再导一次 PDF（`Documents.Open(path, false, true)`，不 `Save()`），这份 PDF 才是交付件；此时表格线不会再被重刷。
+6. `python tools/merge_pdfs.py` 合并各分册，写入一级书签。
+7. 用 PyMuPDF 渲染 2–3 页抽查：摘要页、表格页、参考文献页；再点名抽查几条 `[n]`，看链接是否跳到对应文献条目。
 
 `build_docx.py` 至少要实现：
 
@@ -161,7 +168,7 @@ project/
 - `autoSpaceDE`/`autoSpaceDN` 置 0；
 - 标题/正文/表格/参考文献样式；
 - `[[key]]` 编号与 GB/T 7714 参考文献表；
-- 表格按三线表写（`tblBorders` + 表头 `tcBorders`，不用 `Table Grid`），或构建后跑 `scripts/docx_three_line_table.py`；
+- 表格按三线表写（逐单元格 `tcBorders`，`none` 边不写 `sz`，删 `tblStyle`/`tblLook`/`tblPrEx`），并且**在 Word 更新域之后**再跑一次 `scripts/docx_three_line_table.py` 收口；构建期直接写边框的版本会被 Word 重刷（见第 5 节）。
 - 正文引用与参考文献条目的交叉引用，优先构建后跑 `scripts/docx_cite_xref.py`（REF/SEQ 域，编号自动跟随）；纯版式需求才退回 `--style hyperlink`；
 - 表格 1×1 无边框外层表 + 内层三线表，`cantSplit`、`tblHeader`、列宽按内容分配；
 - 标题/表题/图题/单元格不写 `keepNext`/`keepLines`/`pageBreakBefore`；孤行标题用 `<!-- pagebreak -->` 手动分页；
@@ -173,7 +180,8 @@ project/
 - [ ] 中文楷体、英文 Times New Roman，正文 12 pt、1.5 倍行距、首行缩进 24 pt
 - [ ] 标题 18 pt，英文标题 14 pt，H1 14 pt，H2 12 pt
 - [ ] 表格 10.5 pt，整表不跨页（1×1 外层表 + `cantSplit`），表题在上、来源在下
-- [ ] 表格是三线表：无 `tblStyle`（尤其 `Table Grid`），顶线=底线 1.5 pt、栏目线 0.75 pt，`insideH`/`insideV`/`left`/`right` 均为 `none`（`scripts/docx_three_line_table.py --check` 退出码 0）
+- [ ] 表格是三线表：无 `tblStyle`（尤其 `Table Grid`）、无 `tblLook`、无行级 `tblPrEx`，顶线=底线 1.5 pt、栏目线 0.75 pt，`insideH`/`insideV`/`left`/`right` 均为 `none`（`scripts/docx_three_line_table.py --check` 输出里 `tblPrEx 0 行` 且退出码 0）
+- [ ] 三线表这一步发生在 Word 更新域、删 `_Toc*`、保存**之后**；交付 PDF 由这份成品只读导出（不在 Word 里再保存）
 - [ ] 参考文献 10.5 pt、悬挂缩进 24 pt、左对齐
 - [ ] 源码与 DOCX 中 `U+3000` 计数为 0
 - [ ] 源码与 DOCX 中 `U+3007`（〇）、`○`、`◯`、全角数字计数为 0；纪年写作「一九二零」或「1920」，全篇纪年体例统一
@@ -199,7 +207,9 @@ project/
 | 表格前大片空白 | 整表被推到下一页 | 可接受；在表前补足正文，或把表移到更合适的位置；不要用 keepNext 硬锁 |
 | 参考文献 URL 字距被拉大 | 段落两端对齐 | 参考文献改左对齐 |
 | “一九二O年”“一九二〇年” | 纪年里的零用了 `U+3007` 〇（或拉丁 O、○ U+25CB） | 源码改「零」；整篇也可改阿拉伯数字，但不要一半汉字一半阿拉伯；跑 `scripts/numeral_lint.py` |
-| 表格是满格网格、有竖线 | 用了 `Table Grid`，或只删了 `tblStyle` 没写 `tblBorders` | 跑 `scripts/docx_three_line_table.py`：顶/底 1.5 pt、栏目线 0.75 pt、其余 `none` |
+| 表格是满格网格、有竖线 | 用了 `Table Grid`，或边框容器被 Word 丢掉后按默认样式重刷 | 跑 `scripts/docx_three_line_table.py`：顶/底 1.5 pt、栏目线 0.75 pt、其余 `none` |
+| 三线表“编辑时对、保存后又变网格” | ① `none` 边写了 `w:sz="0"`（非法值，整个边框容器被丢弃）；② 行级 `tblPrEx` 覆盖表级边框；③ 留着 `w:tblLook` 触发重算 | 脚本已同时处理这三条；确认跑的是当前版本，且这一步在 Word 更新域之后 |
+| 三线表跑完、Word 一按 F9 又变网格 | 三线表在更新域之前做，Word 按默认样式重刷了 | 顺序改成“更新域/目录 → 保存 → 三线表 → 只读导出 PDF” |
 | 三线表栏目线跟顶线一样粗 | 表头行没写 `tcBorders/w:bottom`，或把 0.75 写成 1.5 | 栏目线 0.75 pt，顶线/底线 1.5 pt（学校模板另规定时按其值） |
 | 正文 `[12]` 点了不跳转 | 引用是纯文本，没有书签与超链接/域 | 跑 `scripts/docx_cite_xref.py`（默认 `--style reffield`） |
 | 点引用提示“错误！未定义书签” | `_Ref*` 书签被删（例如按旧清单把 `bookmarkStart` 全部清掉），或 REF 指向的书签不存在 | 只删 `_Toc*`，保留 `_Ref*`；断了就重跑脚本 |
@@ -260,7 +270,9 @@ python scripts/docx_three_line_table.py 01-主题.docx --thick 2.25 --thin 1.5  
 python scripts/docx_three_line_table.py 01-主题.docx --header-rows 2  # 两行表头，栏目线画在第二行下
 ```
 
-做法：删掉 `tblStyle`（`Table Grid` 就是它让表格变成满格网格），写 `tblBorders`：top/bottom `single` 粗线、left/right/insideH/insideV `none`；表头行写 `tcBorders/w:bottom` 细线（只写 bottom，避免盖住表格顶线）；顺手补 `cantSplit` 与 `tblHeader`。1×1 排版外层表自动跳过，不会把外层框线也变成粗线。
+做法：删掉 `tblStyle`（`Table Grid` 就是它让表格变成满格网格）、`tblLook`，逐行删 `tblPrEx`；逐单元格写 `tcBorders`——首行 top=粗、首行 bottom=细、末行 bottom=粗、其余 `none`、左右 `none`；`none` 边只写 `w:val="none"` 不写 `w:sz`（写 0 会被 Word 当坏数据整块丢弃，见第 5 节）；顺手补 `cantSplit` 与 `tblHeader`。1×1 排版外层表自动跳过，不会把外层框线也变成粗线。`--check` 读的是“有效边框”（单元格优先、回退表级），并额外报 `tblPrEx` 行数，`>0` 也算不合规。
+
+**什么时候跑**：整份文档 Word 收尾（更新域、更新目录、删 `_Toc*`、保存）**之后**再跑这一次，然后从这份成品只读导出 PDF。脚本幂等，重跑不会把已经合规的表改坏。
 
 ### `docx_cite_xref.py` —— 引用与参考文献交叉引用
 
